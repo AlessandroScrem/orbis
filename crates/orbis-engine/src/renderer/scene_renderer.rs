@@ -105,6 +105,41 @@ mod tests {
     use super::SceneRenderer;
 
     #[test]
+    fn default_graph_lifetimes_cover_transmission_and_outline_dependencies() {
+        use crate::renderer::rendergraph::ResourceId;
+
+        let renderer = SceneRenderer::new();
+        let (pass_order, lifetimes) = renderer.render_graph.compile_lifetimes().unwrap();
+        let names: Vec<_> = pass_order
+            .iter()
+            .map(|&index| renderer.render_graph.passes[index].name())
+            .collect();
+        let position = |name: &str| names.iter().position(|candidate| *candidate == name).unwrap();
+        let lifetime = |resource| lifetimes.iter().find(|item| item.resource == resource).unwrap();
+
+        let opaque = position("MeshPass Opaque");
+        let transmission = position("MeshPass Transmission");
+        let linearize = position("LinearizePass");
+        let outline = position("OutlinePass");
+
+        assert!(opaque < transmission, "opaque pass must precede transmission: {names:?}");
+        assert!(transmission < linearize, "transmission must precede linearization: {names:?}");
+        assert!(linearize < outline, "linearization must precede outline: {names:?}");
+
+        let hdr = lifetime(ResourceId::HDR);
+        assert!(hdr.first_use <= opaque);
+        assert!(hdr.last_use >= transmission);
+
+        let entity = lifetime(ResourceId::ENTITY);
+        assert!(entity.first_use <= opaque);
+        assert!(entity.last_use >= outline);
+
+        let ldr = lifetime(ResourceId::LDR);
+        assert_eq!(ldr.first_use, linearize);
+        assert_eq!(ldr.last_use, outline);
+    }
+
+    #[test]
     fn default_render_graph_compiles_in_pass_order() {
         let renderer = SceneRenderer::new();
         let order = renderer.render_graph.compile_names().unwrap();
