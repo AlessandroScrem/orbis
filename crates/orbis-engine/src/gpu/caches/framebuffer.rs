@@ -78,6 +78,17 @@ impl FramebufferCache {
         layouts: &BindgroupLayoutCache,
         lifetimes: &[(FramebufferKind, usize, usize)],
     ) {
+        // Adopt the initialization/resize allocations on the first frame instead
+        // of creating a second set of textures. This also keeps bind groups that
+        // already reference these textures valid.
+        if self.transient_pool.is_empty() {
+            for kind in FramebufferKind::iter() {
+                let descriptor = self.descriptor(kind);
+                let texture = Arc::clone(&self.framebuffers[kind as usize].texture);
+                self.transient_pool.insert(descriptor, texture);
+            }
+        }
+
         let requests: Vec<_> = FramebufferKind::iter()
             .map(|kind| {
                 let (first_use, last_use) = lifetimes
