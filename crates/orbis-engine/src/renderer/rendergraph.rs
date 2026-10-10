@@ -3,7 +3,9 @@
 use super::*;
 use crate::renderer::framebuilder::FrameData;
 use crate::renderer::scene_renderer::RenderContext;
-use crate::renderer::transient_pool::{TransientRequest, TransientResourcePool};
+use crate::renderer::transient_pool::{
+    TransientRequest, TransientResourcePool, TransientResourceResolver,
+};
 use std::collections::HashMap;
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]
@@ -357,7 +359,7 @@ impl RenderGraph {
         pool: &mut TransientResourcePool<D, R>,
         mut descriptor_for: impl FnMut(ResourceId) -> D,
         create: impl FnMut(&D) -> R,
-    ) -> Result<HashMap<ResourceId, usize>, String>
+    ) -> Result<TransientResourceResolver<ResourceId>, String>
     where
         D: Eq + Clone,
     {
@@ -378,11 +380,13 @@ impl RenderGraph {
             .collect();
 
         let slots = pool.allocate_frame(&requests, create);
-        Ok(lifetimes
+        let slots = lifetimes
             .into_iter()
             .zip(slots)
             .map(|(lifetime, slot)| (lifetime.resource, slot))
-            .collect())
+            .collect();
+
+        Ok(TransientResourceResolver::from_slots(slots))
     }
 
     // -------------------------
@@ -736,7 +740,10 @@ mod tests {
             .unwrap();
 
         // HDR remains live through pass 1, where LDR is first written.
-        assert_ne!(slots[&ResourceId::HDR], slots[&ResourceId::LDR]);
+        assert_ne!(
+            slots.slot_for(&ResourceId::HDR),
+            slots.slot_for(&ResourceId::LDR)
+        );
         assert_eq!(pool.len(), 2);
     }
 
@@ -767,8 +774,8 @@ mod tests {
             .allocate_transient_resources(&mut pool, |_| "texture", |_| ())
             .unwrap();
 
-        assert!(!slots.contains_key(&ResourceId::SHADOWMAP));
-        assert!(slots.contains_key(&ResourceId::HDR));
+        assert_eq!(slots.slot_for(&ResourceId::SHADOWMAP), None);
+        assert!(slots.slot_for(&ResourceId::HDR).is_some());
         assert_eq!(pool.len(), 1);
     }
 
