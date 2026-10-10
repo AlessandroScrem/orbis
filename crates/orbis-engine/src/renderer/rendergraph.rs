@@ -297,17 +297,6 @@ impl RenderGraph {
     /// This is planning metadata only: render passes currently bind framebuffer
     /// resources through GpuManager, so it must not be treated as physical GPU
     /// allocation/aliasing until pass resource access is routed through a resolver.
-    pub(crate) fn compile_names_and_lifetimes(
-        &self,
-    ) -> Result<(Vec<String>, Vec<ResourceLifetime>), String> {
-        let (order, lifetimes) = self.compile_lifetimes()?;
-        let names = order
-            .into_iter()
-            .map(|index| self.passes[index].name().to_owned())
-            .collect();
-        Ok((names, lifetimes))
-    }
-
     pub(crate) fn compile_lifetimes(
         &self,
     ) -> Result<(Vec<usize>, Vec<ResourceLifetime>), String> {
