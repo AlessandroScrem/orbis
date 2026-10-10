@@ -180,7 +180,7 @@ mod tests {
             TransientRequest::new("early", 0, 1),
         ];
         let mut pool = TransientResourcePool::new();
-        let slots = pool.allocate_frame(&requests, str::to_owned);
+        let slots = pool.allocate_frame(&requests, |descriptor| (*descriptor).to_owned());
 
         assert_eq!(pool.get(slots[0]).map(String::as_str), Some("late"));
         assert_eq!(pool.get(slots[1]).map(String::as_str), Some("early"));
