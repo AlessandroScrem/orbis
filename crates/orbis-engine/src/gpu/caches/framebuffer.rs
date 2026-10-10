@@ -4,7 +4,7 @@ use crate::{
     assets::texture_asset::{ColorSpace, SamplerDesc},
     gpu::GpuContextRef,
     renderer::transient_pool::{
-        TransientRequest, TransientResourcePool, TransientTextureDescriptor,
+        TransientRequest, TransientResourcePool, TransientResourceResolver, TransientTextureDescriptor,
         TransientTextureFormat, TransientTextureUsage,
     },
 };
@@ -29,6 +29,7 @@ pub struct Framebuffer {
 pub struct FramebufferCache {
     framebuffers: Vec<Framebuffer>,
     transient_pool: TransientResourcePool<TransientTextureDescriptor, Arc<GpuTexture>>,
+    resolver: Option<TransientResourceResolver<FramebufferKind>>,
     width: u32,
     height: u32,
 }
@@ -43,6 +44,7 @@ impl FramebufferCache {
         let mut cache = Self {
             framebuffers: Vec::new(),
             transient_pool: TransientResourcePool::new(),
+            resolver: None,
             width,
             height,
         };
@@ -64,6 +66,7 @@ impl FramebufferCache {
         self.width = width;
         self.height = height;
         self.transient_pool.clear();
+        self.resolver = None;
         self.recreate_framebuffers(gpu, layouts);
     }
 
@@ -107,18 +110,23 @@ impl FramebufferCache {
             Arc::new(Self::create_texture(gpu, *descriptor, width, height))
         });
 
-        self.framebuffers = FramebufferKind::iter()
-            .zip(slots)
-            .map(|(kind, slot)| {
+        let resolver = TransientResourceResolver::from_slots(
+            FramebufferKind::iter().zip(slots).collect(),
+        );
+        let framebuffers = FramebufferKind::iter()
+            .map(|kind| {
                 let texture = Arc::clone(
-                    self.transient_pool
-                        .get(slot)
-                        .expect("transient framebuffer slot must exist"),
+                    resolver
+                        .resolve(&kind, &self.transient_pool)
+                        .expect("transient framebuffer resource must resolve"),
                 );
                 let bind_group = Self::create_bind_group(gpu, layouts, kind, &texture);
                 Framebuffer { texture, bind_group }
             })
             .collect();
+
+        self.resolver = Some(resolver);
+        self.framebuffers = framebuffers;
     }
 
     pub fn get_texture(&self, kind: FramebufferKind) -> &wgpu::Texture {
