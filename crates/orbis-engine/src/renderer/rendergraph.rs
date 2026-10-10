@@ -3,6 +3,7 @@
 use super::*;
 use crate::renderer::framebuilder::FrameData;
 use crate::renderer::scene_renderer::RenderContext;
+use crate::renderer::transient_pool::{TransientRequest, TransientResourcePool};
 use std::collections::HashMap;
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]
@@ -330,6 +331,40 @@ impl RenderGraph {
         lifetimes.sort_by_key(|lifetime| lifetime.resource.to_string());
 
         Ok((order, lifetimes))
+    }
+
+    /// Allocates physical slots for the graph's logical resources using compiled lifetimes.
+    ///
+    /// The descriptor callback must include every GPU property relevant to compatibility.
+    /// This is the graph-to-pool planning seam; renderer passes must resolve logical
+    /// resources through the returned map before physical texture aliasing is enabled.
+    pub(crate) fn allocate_transient_resources<D, R>(
+        &self,
+        pool: &mut TransientResourcePool<D, R>,
+        mut descriptor_for: impl FnMut(ResourceId) -> D,
+        create: impl FnMut(&D) -> R,
+    ) -> Result<HashMap<ResourceId, usize>, String>
+    where
+        D: Eq + Clone,
+    {
+        let (_, lifetimes) = self.compile_lifetimes()?;
+        let requests: Vec<_> = lifetimes
+            .iter()
+            .map(|lifetime| {
+                TransientRequest::new(
+                    descriptor_for(lifetime.resource),
+                    lifetime.first_use,
+                    lifetime.last_use,
+                )
+            })
+            .collect();
+
+        let slots = pool.allocate_frame(&requests, create);
+        Ok(lifetimes
+            .into_iter()
+            .zip(slots)
+            .map(|(lifetime, slot)| (lifetime.resource, slot))
+            .collect())
     }
 
     // -------------------------
@@ -661,6 +696,32 @@ mod tests {
             "diagnostic should contain only the cycle"
         );
     }
+    #[test]
+    fn graph_allocates_slots_from_compiled_resource_lifetimes() {
+        struct Pass {
+            reads: Vec<ResourceId>,
+            writes: Vec<ResourceId>,
+        }
+        impl RenderPass for Pass {
+            fn name(&self) -> &'static str { "TestPass" }
+            fn reads(&self) -> &[ResourceId] { &self.reads }
+            fn writes(&self) -> &[ResourceId] { &self.writes }
+        }
+
+        let mut graph = RenderGraph::new();
+        graph.add_pass(Pass { reads: vec![], writes: vec![ResourceId::HDR] });
+        graph.add_pass(Pass { reads: vec![ResourceId::HDR], writes: vec![ResourceId::LDR] });
+        let mut pool = TransientResourcePool::new();
+
+        let slots = graph
+            .allocate_transient_resources(&mut pool, |_| "same-format", |_| ())
+            .unwrap();
+
+        // HDR remains live through pass 1, where LDR is first written.
+        assert_ne!(slots[&ResourceId::HDR], slots[&ResourceId::LDR]);
+        assert_eq!(pool.len(), 2);
+    }
+
     #[test]
     fn resource_lifetimes_use_compiled_execution_order() {
         struct Pass {
