@@ -352,8 +352,8 @@ impl RenderGraph {
     /// Allocates physical slots for the graph's logical resources using compiled lifetimes.
     ///
     /// The descriptor callback must include every GPU property relevant to compatibility.
-    /// This is the graph-to-pool planning seam; renderer passes must resolve logical
-    /// resources through the returned map before physical texture aliasing is enabled.
+    /// The returned resolver maps graph resources to retained pool allocations. The
+    /// framebuffer cache uses the same lifetime/slot contract for GPU-backed resources.
     pub(crate) fn allocate_transient_resources<D, R>(
         &self,
         pool: &mut TransientResourcePool<D, R>,
