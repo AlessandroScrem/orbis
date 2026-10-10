@@ -56,11 +56,10 @@ impl<D> TransientRequest<D> {
 }
 
 
-/// Maps logical graph resources to pool slots and resolves them to retained resources.
+/// Maps logical resource identifiers to pool slots and resolves retained resources.
 ///
-/// This is the boundary between logical resource IDs and physical allocations.
-/// It does not itself change render-pass access; passes must use this resolver
-/// before transient resources can replace the current framebuffer-cache path.
+/// GPU-backed caches use this mapping to bind the current physical allocation to
+/// each logical framebuffer resource before the render graph executes.
 pub(crate) struct TransientResourceResolver<K> {
     slots: HashMap<K, usize>,
 }
