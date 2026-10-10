@@ -39,6 +39,20 @@ impl fmt::Debug for ResourceId {
     }
 }
 
+impl ResourceId {
+    /// Whether the graph owns this resource's per-frame allocation.
+    ///
+    /// Shadow maps are managed by ShadowManager, while pick buffers belong to
+    /// the picking/readback path. Neither may be allocated or aliased by the
+    /// transient render-target pool.
+    fn is_transient(self) -> bool {
+        matches!(
+            self,
+            Self::ENTITY | Self::DEPTH | Self::HDR | Self::LDR | Self::OPAQUE
+        )
+    }
+}
+
 #[derive(Clone, Copy)]
 enum VisitState {
     NotVisited,
@@ -348,6 +362,10 @@ impl RenderGraph {
         D: Eq + Clone,
     {
         let (_, lifetimes) = self.compile_lifetimes()?;
+        let lifetimes: Vec<_> = lifetimes
+            .into_iter()
+            .filter(|lifetime| lifetime.resource.is_transient())
+            .collect();
         let requests: Vec<_> = lifetimes
             .iter()
             .map(|lifetime| {
@@ -720,6 +738,38 @@ mod tests {
         // HDR remains live through pass 1, where LDR is first written.
         assert_ne!(slots[&ResourceId::HDR], slots[&ResourceId::LDR]);
         assert_eq!(pool.len(), 2);
+    }
+
+    #[test]
+    fn transient_allocation_excludes_externally_managed_resources() {
+        struct Pass(ResourceId);
+
+        impl RenderPass for Pass {
+            fn name(&self) -> &'static str {
+                "Resource writer"
+            }
+
+            fn reads(&self) -> &[ResourceId] {
+                &[]
+            }
+
+            fn writes(&self) -> &[ResourceId] {
+                std::slice::from_ref(&self.0)
+            }
+        }
+
+        let mut graph = RenderGraph::new();
+        graph.add_pass(Pass(ResourceId::SHADOWMAP));
+        graph.add_pass(Pass(ResourceId::HDR));
+
+        let mut pool = TransientResourcePool::new();
+        let slots = graph
+            .allocate_transient_resources(&mut pool, |_| "texture", |_| ())
+            .unwrap();
+
+        assert!(!slots.contains_key(&ResourceId::SHADOWMAP));
+        assert!(slots.contains_key(&ResourceId::HDR));
+        assert_eq!(pool.len(), 1);
     }
 
     #[test]
