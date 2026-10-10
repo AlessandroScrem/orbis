@@ -5,6 +5,9 @@
 //! The caller is responsible for deriving accurate lifetimes from the compiled
 //! pass order and for ensuring encoded work is submitted in that order.
 
+use std::collections::HashMap;
+use std::hash::Hash;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TransientRequest<D> {
     pub(crate) descriptor: D,
@@ -49,6 +52,45 @@ impl<D> TransientRequest<D> {
     pub(crate) fn new(descriptor: D, first_use: usize, last_use: usize) -> Self {
         assert!(first_use <= last_use, "transient resource lifetime is inverted");
         Self { descriptor, first_use, last_use }
+    }
+}
+
+
+/// Maps logical graph resources to pool slots and resolves them to retained resources.
+///
+/// This is the boundary between logical resource IDs and physical allocations.
+/// It does not itself change render-pass access; passes must use this resolver
+/// before transient resources can replace the current framebuffer-cache path.
+pub(crate) struct TransientResourceResolver<K> {
+    slots: HashMap<K, usize>,
+}
+
+impl<K: Eq + Hash> TransientResourceResolver<K> {
+    pub(crate) fn from_slots(slots: HashMap<K, usize>) -> Self {
+        Self { slots }
+    }
+
+    pub(crate) fn slot_for(&self, resource: &K) -> Option<usize> {
+        self.slots.get(resource).copied()
+    }
+
+    pub(crate) fn resolve<'a, D, R>(
+        &self,
+        resource: &K,
+        pool: &'a TransientResourcePool<D, R>,
+    ) -> Option<&'a R>
+    where
+        D: Eq + Clone,
+    {
+        pool.get(self.slot_for(resource)?)
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.slots.len()
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.slots.is_empty()
     }
 }
 
@@ -303,5 +345,28 @@ mod tests {
     #[should_panic(expected = "transient resource lifetime is inverted")]
     fn rejects_inverted_lifetime() {
         let _ = TransientRequest::new("rgba8", 3, 2);
+    }
+}
+
+#[cfg(test)]
+mod resolver_tests {
+    use super::*;
+
+    #[test]
+    fn resolver_maps_logical_resources_to_pool_allocations() {
+        let mut pool = TransientResourcePool::new();
+        let slots = pool.allocate_frame(
+            &[TransientRequest::new("rgba8", 0, 0)],
+            |_| String::from("physical allocation"),
+        );
+        let resolver = TransientResourceResolver::from_slots(
+            [("HDR", slots[0])].into_iter().collect(),
+        );
+
+        assert_eq!(
+            resolver.resolve(&"HDR", &pool).map(String::as_str),
+            Some("physical allocation")
+        );
+        assert_eq!(resolver.slot_for(&"LDR"), None);
     }
 }
