@@ -110,6 +110,10 @@ impl FramebufferCache {
         let resolver = TransientResourceResolver::from_slots(
             FramebufferKind::iter().zip(slots).collect(),
         );
+        let mut previous: Vec<_> = std::mem::take(&mut self.framebuffers)
+            .into_iter()
+            .map(Some)
+            .collect();
         let framebuffers = FramebufferKind::iter()
             .map(|kind| {
                 let texture = Arc::clone(
@@ -117,8 +121,14 @@ impl FramebufferCache {
                         .resolve(&kind, &self.transient_pool)
                         .expect("transient framebuffer resource must resolve"),
                 );
-                let bind_group = Self::create_bind_group(gpu, layouts, kind, &texture);
-                Framebuffer { texture, bind_group }
+
+                match previous[kind as usize].take() {
+                    Some(framebuffer) if Arc::ptr_eq(&framebuffer.texture, &texture) => framebuffer,
+                    _ => {
+                        let bind_group = Self::create_bind_group(gpu, layouts, kind, &texture);
+                        Framebuffer { texture, bind_group }
+                    }
+                }
             })
             .collect();
 
