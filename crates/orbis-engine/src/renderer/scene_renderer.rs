@@ -110,7 +110,7 @@ mod tests {
 
         let renderer = SceneRenderer::new();
         let (names, lifetimes) = renderer.render_graph.compile_names_and_lifetimes().unwrap();
-        let position = |name: &str| names.iter().position(|candidate| *candidate == name).unwrap();
+        let position = |name: &str| names.iter().position(|candidate| candidate.as_str() == name).unwrap();
         let lifetime = |resource| lifetimes.iter().find(|item| item.resource == resource).unwrap();
 
         let opaque = position("MeshPass Opaque");
