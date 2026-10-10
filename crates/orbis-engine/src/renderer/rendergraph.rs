@@ -50,7 +50,7 @@ impl ResourceId {
     fn is_transient(self) -> bool {
         matches!(
             self,
-            Self::ENTITY | Self::DEPTH | Self::HDR | Self::LDR | Self::OPAQUE
+            Self::ENTITY | Self::DEPTH | Self::HDR | Self::OPAQUE
         )
     }
 }
@@ -732,17 +732,17 @@ mod tests {
 
         let mut graph = RenderGraph::new();
         graph.add_pass(Pass { reads: vec![], writes: vec![ResourceId::HDR] });
-        graph.add_pass(Pass { reads: vec![ResourceId::HDR], writes: vec![ResourceId::LDR] });
+        graph.add_pass(Pass { reads: vec![ResourceId::HDR], writes: vec![ResourceId::OPAQUE] });
         let mut pool = TransientResourcePool::new();
 
         let slots = graph
             .allocate_transient_resources(&mut pool, |_| "same-format", |_| ())
             .unwrap();
 
-        // HDR remains live through pass 1, where LDR is first written.
+        // HDR remains live through pass 1, where OPAQUE is first written.
         assert_ne!(
             slots.slot_for(&ResourceId::HDR),
-            slots.slot_for(&ResourceId::LDR)
+            slots.slot_for(&ResourceId::OPAQUE)
         );
         assert_eq!(pool.len(), 2);
     }
