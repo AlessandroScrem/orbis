@@ -171,6 +171,14 @@ impl<D: Eq + Clone, R> TransientResourcePool<D, R> {
         assignments
     }
 
+    /// Inserts an already-created compatible resource into the retained pool.
+    /// Used to adopt framebuffer allocations created during renderer initialization.
+    pub(crate) fn insert(&mut self, descriptor: D, resource: R) -> usize {
+        let slot = self.entries.len();
+        self.entries.push(Entry { descriptor, resource });
+        slot
+    }
+
     pub(crate) fn get(&self, slot: usize) -> Option<&R> {
         self.entries.get(slot).map(|entry| &entry.resource)
     }
