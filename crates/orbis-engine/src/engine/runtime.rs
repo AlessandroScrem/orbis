@@ -261,13 +261,13 @@ impl Runtime {
             );
             let context = SceneRenderContext {
                 gpu_context: &self.gpu_context,
-                gpu_manager: &self.gpu_manager,
+                gpu_manager: &mut self.gpu_manager,
                 shadow_manager: &self.shadow_manager,
                 pipeline_manager: &self.pipeline_manager,
                 gpu_cache: &self.gpu_cache,
             };
             self.scene_renderer
-                .render(&context, &mut encoder, &target, &frame_data);
+                .render(&mut context, &mut encoder, &target, &frame_data);
 
             if let Some(preview_texture) = self.material_preview_renderer.render(
                 &mut encoder,
