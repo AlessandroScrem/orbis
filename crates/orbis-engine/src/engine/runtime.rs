@@ -259,7 +259,7 @@ impl Runtime {
                 &self.texture_loader,
                 &self.gpu_manager,
             );
-            let context = SceneRenderContext {
+            let mut context = SceneRenderContext {
                 gpu_context: &self.gpu_context,
                 gpu_manager: &mut self.gpu_manager,
                 shadow_manager: &self.shadow_manager,
