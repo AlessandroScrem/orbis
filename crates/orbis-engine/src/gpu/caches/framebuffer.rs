@@ -29,7 +29,6 @@ pub struct Framebuffer {
 pub struct FramebufferCache {
     framebuffers: Vec<Framebuffer>,
     transient_pool: TransientResourcePool<TransientTextureDescriptor, Arc<GpuTexture>>,
-    resolver: Option<TransientResourceResolver<FramebufferKind>>,
     width: u32,
     height: u32,
 }
@@ -44,7 +43,6 @@ impl FramebufferCache {
         let mut cache = Self {
             framebuffers: Vec::new(),
             transient_pool: TransientResourcePool::new(),
-            resolver: None,
             width,
             height,
         };
@@ -66,7 +64,6 @@ impl FramebufferCache {
         self.width = width;
         self.height = height;
         self.transient_pool.clear();
-        self.resolver = None;
         self.recreate_framebuffers(gpu, layouts);
     }
 
@@ -125,7 +122,6 @@ impl FramebufferCache {
             })
             .collect();
 
-        self.resolver = Some(resolver);
         self.framebuffers = framebuffers;
     }
 
