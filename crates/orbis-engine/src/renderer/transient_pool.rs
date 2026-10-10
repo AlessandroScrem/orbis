@@ -12,6 +12,39 @@ pub(crate) struct TransientRequest<D> {
     pub(crate) last_use: usize,
 }
 
+/// Complete compatibility key for a transient 2D GPU texture allocation.
+///
+/// Keep this descriptor independent of wgpu handles so compatibility can be
+/// tested without creating a device. Any property affecting texture creation
+/// must be represented here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct TransientTextureDescriptor {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) format: TransientTextureFormat,
+    pub(crate) mip_level_count: u32,
+    pub(crate) usage: TransientTextureUsage,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum TransientTextureFormat {
+    Rgba8Unorm,
+    Rgba8UnormSrgb,
+    Rgba16Float,
+    Rgba32Float,
+    Rg32Uint,
+    Depth32Float,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum TransientTextureUsage {
+    RenderTarget,
+    EntityId,
+    DepthTarget,
+    SampledTexture,
+    SampledTextureStorage,
+}
+
 impl<D> TransientRequest<D> {
     pub(crate) fn new(descriptor: D, first_use: usize, last_use: usize) -> Self {
         assert!(first_use <= last_use, "transient resource lifetime is inverted");
@@ -159,6 +192,44 @@ mod tests {
         let slots = pool.allocate_frame(&requests, |_| ());
         assert_ne!(slots[0], slots[1]);
         assert_eq!(pool.len(), 2);
+    }
+
+    #[test]
+    fn texture_descriptors_require_all_allocation_properties_to_match() {
+        let base = TransientTextureDescriptor {
+            width: 1280,
+            height: 720,
+            format: TransientTextureFormat::Rgba16Float,
+            mip_level_count: 1,
+            usage: TransientTextureUsage::RenderTarget,
+        };
+        let different_extent = TransientTextureDescriptor { width: 640, ..base };
+        let different_format = TransientTextureDescriptor {
+            format: TransientTextureFormat::Rgba8Unorm,
+            ..base
+        };
+        let different_mips = TransientTextureDescriptor {
+            mip_level_count: 4,
+            ..base
+        };
+        let different_usage = TransientTextureDescriptor {
+            usage: TransientTextureUsage::SampledTextureStorage,
+            ..base
+        };
+
+        assert_eq!(base, base);
+        assert_ne!(base, different_extent);
+        assert_ne!(base, different_format);
+        assert_ne!(base, different_mips);
+        assert_ne!(base, different_usage);
+
+        let requests = [
+            TransientRequest::new(base, 0, 0),
+            TransientRequest::new(different_format, 1, 1),
+        ];
+        let mut pool = TransientResourcePool::new();
+        let slots = pool.allocate_frame(&requests, |descriptor| *descriptor);
+        assert_ne!(slots[0], slots[1]);
     }
 
     #[test]
