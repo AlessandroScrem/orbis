@@ -109,11 +109,7 @@ mod tests {
         use crate::renderer::rendergraph::ResourceId;
 
         let renderer = SceneRenderer::new();
-        let (pass_order, lifetimes) = renderer.render_graph.compile_lifetimes().unwrap();
-        let names: Vec<_> = pass_order
-            .iter()
-            .map(|&index| renderer.render_graph.passes[index].name())
-            .collect();
+        let (names, lifetimes) = renderer.render_graph.compile_names_and_lifetimes().unwrap();
         let position = |name: &str| names.iter().position(|candidate| *candidate == name).unwrap();
         let lifetime = |resource| lifetimes.iter().find(|item| item.resource == resource).unwrap();
 
