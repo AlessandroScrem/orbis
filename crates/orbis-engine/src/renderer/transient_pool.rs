@@ -145,6 +145,14 @@ impl<D: Eq + Clone, R> TransientResourcePool<D, R> {
     pub(crate) fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+
+    /// Releases every retained resource allocation.
+    ///
+    /// Call when allocation dimensions or renderer configuration change and
+    /// previously retained resources should no longer be reused.
+    pub(crate) fn clear(&mut self) {
+        self.entries.clear();
+    }
 }
 
 #[cfg(test)]
@@ -263,6 +271,32 @@ mod tests {
         let slots = pool.allocate_frame(&[TransientRequest::new(1, 0, 0)], |_| 5);
         *pool.get_mut(slots[0]).unwrap() = 7;
         assert_eq!(pool.get(slots[0]), Some(&7));
+    }
+
+    #[test]
+    fn clear_releases_retained_resources() {
+        use std::cell::Cell;
+        use std::rc::Rc;
+
+        struct DropCounter(Rc<Cell<usize>>);
+
+        impl Drop for DropCounter {
+            fn drop(&mut self) {
+                self.0.set(self.0.get() + 1);
+            }
+        }
+
+        let drops = Rc::new(Cell::new(0));
+        let mut pool = TransientResourcePool::new();
+        pool.allocate_frame(&[TransientRequest::new(1, 0, 0)], |_| {
+            DropCounter(Rc::clone(&drops))
+        });
+
+        assert_eq!(pool.len(), 1);
+        pool.clear();
+
+        assert!(pool.is_empty());
+        assert_eq!(drops.get(), 1);
     }
 
     #[test]
