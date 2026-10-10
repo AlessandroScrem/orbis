@@ -71,13 +71,11 @@ impl SceneRenderer {
         target: &wgpu::TextureView,
         frame: &FrameData,
     ) {
-        let SceneRenderContext {
-            gpu_context,
-            gpu_manager,
-            shadow_manager,
-            pipeline_manager,
-            gpu_cache,
-        } = runtime;
+        let gpu_context = runtime.gpu_context;
+        let gpu_manager = &mut *runtime.gpu_manager;
+        let shadow_manager = runtime.shadow_manager;
+        let pipeline_manager = runtime.pipeline_manager;
+        let gpu_cache = runtime.gpu_cache;
 
         let framebuffer_lifetimes = match self.render_graph.compile_lifetimes() {
             Ok((_, lifetimes)) => lifetimes
@@ -104,7 +102,7 @@ impl SceneRenderer {
 
         let mut ctx = RenderContext {
             device: &gpu_context.device,
-            gpu_cache: &gpu_cache,
+            gpu_cache,
             gpu_mgr: gpu_manager,
             shadow_mgr: shadow_manager,
             pip_mgr: pipeline_manager,
