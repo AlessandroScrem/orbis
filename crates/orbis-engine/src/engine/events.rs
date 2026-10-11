@@ -8,5 +8,6 @@ pub enum RuntimeEvent {
     DroppedFile(PathBuf),
     SetWindowTitle(String),
     UpdateIblMaps(IblId),
+    ClearIblMaps,
     ReadbackSelection((u32, u32), (u32, u32)),
 }

@@ -40,6 +40,23 @@ impl BindgroupCache {
     pub fn get_mut(&mut self, kind: BindgroupKind) -> &mut wgpu::BindGroup {
         &mut self.bg[kind as usize]
     }
+
+    pub(crate) fn reset_ibl(
+        &mut self,
+        gpu: &GpuContextRef,
+        buffer_cache: &BufferCache,
+        framebuffer_cache: &FramebufferCache,
+        layouts: &BindgroupLayoutCache,
+    ) {
+        for kind in [
+            BindgroupKind::PbrMap,
+            BindgroupKind::Skybox,
+            BindgroupKind::SkyboxBlur,
+        ] {
+            self.bg[kind as usize] =
+                Self::create(gpu, buffer_cache, framebuffer_cache, layouts, kind);
+        }
+    }
 }
 
 impl BindgroupCache {

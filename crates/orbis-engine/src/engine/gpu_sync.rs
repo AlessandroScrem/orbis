@@ -10,8 +10,8 @@ use crate::engine::RuntimeEvent;
 use crate::engine::engine::EventBus;
 use crate::gpu::texture::GpuTextureBuilder;
 use crate::gpu::{
-    BindgroupLayoutKind, GpuCache, GpuContext, GpuManager, GpuMaterial, GpuMesh, GpuTextureCache,
-    IblManager,
+    BindgroupLayoutKind, GpuCache, GpuContext, GpuManager, GpuMaterial, GpuMaterialCache, GpuMesh,
+    GpuTextureCache, IblManager,
 };
 use crate::renderer::{ImguiRender, MaterialPreviewRenderer};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -128,6 +128,7 @@ pub(crate) fn sync_gpu_assets(
     let material_cache = &mut gpu_cache.material;
     let mesh_cache = &mut gpu_cache.mesh;
     let grouped = asset_mgr.drain_grouped_events();
+    let mut removed_ibl_from_texture = false;
     grouped.process_type::<TextureAsset, _>(|kind, events| match kind {
         AssetEventKind::Created | AssetEventKind::Updated => {
             let jobs: Vec<(TextureId, TextureDesc)> = events
@@ -142,6 +143,14 @@ pub(crate) fn sync_gpu_assets(
             // If decoding fails, the material will be rebuilt against the white fallback.
             for (id, _) in &jobs {
                 remove_gpu_texture(texture_cache, imgui_render, *id);
+                rebuild_materials_using_texture(
+                    asset_mgr,
+                    texture_cache,
+                    material_cache,
+                    gpu_context,
+                    gpu_manager,
+                    *id,
+                );
             }
             texture_loader.request(jobs);
         }
@@ -153,32 +162,20 @@ pub(crate) fn sync_gpu_assets(
                 .filter(|(hdr_id, _)| *hdr_id == ev.id)
                 .map(|(_, ibl_id)| *ibl_id)
                 .collect::<Vec<_>>();
-            for ibl_id in removed_ibl {
-                ibl_manager.remove(ibl_id);
-                hdr_vec.retain(|(_, existing_id)| *existing_id != ibl_id);
+            for ibl_id in &removed_ibl {
+                ibl_manager.remove(*ibl_id);
+                hdr_vec.retain(|(_, existing_id)| existing_id != ibl_id);
             }
+            removed_ibl_from_texture |= !removed_ibl.is_empty();
 
-            // Materials may still refer to an explicitly removed texture. Rebuild
-            // their bind groups so the cache resolves that slot to a built-in fallback.
-            let dependent_materials = asset_mgr
-                .iter::<MaterialAsset>()
-                .filter(|(_, material)| material.desc.get_textures().contains(&ev.id))
-                .map(|(material_id, _)| material_id)
-                .collect::<Vec<_>>();
-            for material_id in dependent_materials {
-                if let Some(material) = asset_mgr.get::<MaterialAsset>(material_id) {
-                    let layout = gpu_manager.get_bindgroup_layout(BindgroupLayoutKind::Material);
-                    material_cache.insert(
-                        material_id,
-                        GpuMaterial::new(
-                            texture_cache,
-                            &material.desc,
-                            &gpu_context.device,
-                            layout,
-                        ),
-                    );
-                }
-            }
+            rebuild_materials_using_texture(
+                asset_mgr,
+                texture_cache,
+                material_cache,
+                gpu_context,
+                gpu_manager,
+                ev.id,
+            );
         }),
         _ => {}
     });
@@ -214,14 +211,19 @@ pub(crate) fn sync_gpu_assets(
         }
     }
 
+    let mut removed_ibl_asset = false;
     grouped.process_type::<IblAsset, _>(|kind, events| {
         if let AssetEventKind::Removed = kind {
             for event in events {
                 ibl_manager.remove(event.id);
                 hdr_vec.retain(|(_, ibl_id)| *ibl_id != event.id);
+                removed_ibl_asset = true;
             }
         }
     });
+    if removed_ibl_asset || removed_ibl_from_texture {
+        select_fallback_ibl(hdr_vec, bus);
+    }
 
     // Create or refresh environments once their HDR texture is available.
     for (id, asset) in asset_mgr.iter::<IblAsset>() {
@@ -360,6 +362,45 @@ mod tests {
             loader.states.get(&id),
             Some(&super::TextureLoadState::Failed)
         );
+    }
+}
+
+fn select_fallback_ibl(hdr_vec: &[(TextureId, IblId)], bus: &mut EventBus) {
+    if let Some((_, id)) = hdr_vec.first() {
+        bus.send_domain(Selection(SelectIbl(*id)));
+        bus.send_runtime(RuntimeEvent::UpdateIblMaps(*id));
+    } else {
+        bus.send_runtime(RuntimeEvent::ClearIblMaps);
+    }
+}
+
+fn rebuild_materials_using_texture(
+    asset_mgr: &AssetManager,
+    texture_cache: &GpuTextureCache,
+    material_cache: &mut GpuMaterialCache,
+    gpu_context: &GpuContext,
+    gpu_manager: &GpuManager,
+    texture_id: TextureId,
+) {
+    let dependent_materials = asset_mgr
+        .iter::<MaterialAsset>()
+        .filter(|(_, material)| material.desc.get_textures().contains(&texture_id))
+        .map(|(material_id, _)| material_id)
+        .collect::<Vec<_>>();
+
+    let layout = gpu_manager.get_bindgroup_layout(BindgroupLayoutKind::Material);
+    for material_id in dependent_materials {
+        if let Some(material) = asset_mgr.get::<MaterialAsset>(material_id) {
+            material_cache.insert(
+                material_id,
+                GpuMaterial::new(
+                    texture_cache,
+                    &material.desc,
+                    &gpu_context.device,
+                    layout,
+                ),
+            );
+        }
     }
 }
 

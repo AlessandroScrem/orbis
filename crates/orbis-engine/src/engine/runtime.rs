@@ -191,6 +191,11 @@ impl Runtime {
                         &self.gpu_context.device,
                     );
                 }
+                RuntimeEvent::ClearIblMaps => {
+                    self.material_preview_renderer.invalidate_environment();
+                    self.gpu_manager
+                        .clear_ibl_bindgroups(&self.gpu_context.as_ref());
+                }
                 RuntimeEvent::ReadbackSelection(pos, size) => {
                     PickingService::request_selection(
                         &mut self.readback,

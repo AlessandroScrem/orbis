@@ -78,6 +78,15 @@ impl GpuManager {
         }
     }
 
+    pub fn clear_ibl_bindgroups(&mut self, gpu: &GpuContextRef) {
+        self.bindgroup_cache.reset_ibl(
+            gpu,
+            &self.buffer_cache,
+            &self.framebuffer_cache,
+            &self.layout_cache,
+        );
+    }
+
     pub fn replace_pbrmap_skybox_bindgroup(
         &mut self,
         ibl: Option<&GpuIbl>,
