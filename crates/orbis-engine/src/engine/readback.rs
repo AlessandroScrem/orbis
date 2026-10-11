@@ -53,13 +53,7 @@ impl PickObject {
     }
 
     fn decode(results: ReadbackResult) -> Option<u64> {
-        let id = u32::from_le_bytes([
-            results.bytes[0],
-            results.bytes[1],
-            results.bytes[2],
-            results.bytes[3],
-        ]);
-        if id == 0 { None } else { Some(id as u64) }
+        decode_entity_id(&results.bytes)
     }
 }
 
@@ -136,14 +130,21 @@ impl Select {
     fn decode(results: ReadbackResult) -> Vec<u64> {
         results
             .bytes
-            .chunks_exact(4)
-            .map(|pixel| pixel[0] as u64)
-            .filter(|&id| id != 0)
-            // .map(EntityRawU64::from_raw_u64)
+            .chunks_exact(8)
+            .filter_map(decode_entity_id)
             .collect::<HashSet<u64>>()
             .into_iter()
             .collect()
     }
+}
+
+fn decode_entity_id(bytes: &[u8]) -> Option<u64> {
+    let pixel: [u8; 8] = bytes.get(..8)?.try_into().ok()?;
+    let low = u32::from_le_bytes(pixel[..4].try_into().ok()?);
+    let high = u32::from_le_bytes(pixel[4..].try_into().ok()?);
+    let id = (u64::from(high) << 32) | u64::from(low);
+
+    (id != 0).then_some(id)
 }
 
 pub enum QueryResult {
@@ -195,28 +196,132 @@ mod tests {
     #[test]
     fn should_read_pick() {
         let gpu = &get_gpu_context_test();
+        let expected = (0x1234_5678_u64 << 32) | 0x9abc_def0_u64;
+        let pixel = [
+            (expected as u32).to_le_bytes(),
+            ((expected >> 32) as u32).to_le_bytes(),
+        ]
+        .concat();
 
-        let gpu_texture =
-            GpuTextureBuilder::from_static(&static_textures::LIGHTBULB_STATIC_TEXTURE).build(gpu);
+        let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("pick readback test texture"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rg32Uint,
+            usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
 
-        let texture = gpu_texture.inner;
+        gpu.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &pixel,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(8),
+                rows_per_image: Some(1),
+            },
+            wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+        );
 
         let mut pick = PickObject::default();
-
-        pick.request(gpu, &texture, (15, 15));
+        pick.request(gpu, &texture, (0, 0));
 
         let result = loop {
             GpuReadback::poll(gpu.device);
 
             match pick.poll() {
-                PollResult::Pending => {
-                    std::thread::yield_now();
-                }
+                PollResult::Pending => std::thread::yield_now(),
                 PollResult::Ready(result) => break result,
-                PollResult::Idle => {}
+                PollResult::Idle => std::thread::yield_now(),
             }
         };
-        assert!(result.is_some());
+
+        assert_eq!(result, Some(expected));
+    }
+
+    #[test]
+    fn decode_entity_id_preserves_both_u32_components() {
+        let expected = (0x1234_5678_u64 << 32) | 0x9abc_def0_u64;
+        let low = (expected as u32).to_le_bytes();
+        let high = ((expected >> 32) as u32).to_le_bytes();
+        let bytes = [low, high].concat();
+
+        assert_eq!(decode_entity_id(&bytes), Some(expected));
+        assert_eq!(
+            PickObject::decode(ReadbackResult {
+                bytes: bytes.clone(),
+                size: (1, 1),
+            }),
+            Some(expected)
+        );
+        assert_eq!(
+            Select::decode(ReadbackResult {
+                bytes: [bytes.clone(), bytes].concat(),
+                size: (2, 1),
+            }),
+            vec![expected]
+        );
+    }
+
+    #[test]
+    fn decode_entity_id_ignores_zero_and_incomplete_pixels() {
+        assert_eq!(decode_entity_id(&[0; 8]), None);
+        assert_eq!(decode_entity_id(&[1, 2, 3, 4]), None);
+
+        let zero_low = 0_u32.to_le_bytes();
+        let zero_high = 0_u32.to_le_bytes();
+        assert_eq!(
+            Select::decode(ReadbackResult {
+                bytes: [zero_low, zero_high].concat(),
+                size: (1, 1),
+            }),
+            Vec::<u64>::new()
+        );
+    }
+
+    #[test]
+    fn rectangular_selection_decodes_multiple_ids_and_ignores_zero_and_trailing_bytes() {
+        let first = (0x0000_0002_u64 << 32) | 0x0000_0003_u64;
+        let second = (0x1234_5678_u64 << 32) | 0x9abc_def0_u64;
+
+        let encode = |id: u64| {
+            [
+                (id as u32).to_le_bytes(),
+                ((id >> 32) as u32).to_le_bytes(),
+            ]
+            .concat()
+        };
+
+        let mut bytes = encode(first);
+        bytes.extend_from_slice(&encode(0));
+        bytes.extend_from_slice(&encode(second));
+        bytes.extend_from_slice(&encode(first));
+        bytes.extend_from_slice(&[0xaa, 0xbb, 0xcc]); // incomplete trailing pixel
+
+        let mut actual = Select::decode(ReadbackResult {
+            bytes,
+            size: (5, 1),
+        });
+        actual.sort_unstable();
+
+        let mut expected = vec![first, second];
+        expected.sort_unstable();
+        assert_eq!(actual, expected);
     }
 
     #[test]
