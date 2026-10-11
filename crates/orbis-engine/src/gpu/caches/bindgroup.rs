@@ -41,6 +41,23 @@ impl BindgroupCache {
         &mut self.bg[kind as usize]
     }
 
+    pub(crate) fn reset_ibl(
+        &mut self,
+        gpu: &GpuContextRef,
+        buffer_cache: &BufferCache,
+        framebuffer_cache: &FramebufferCache,
+        layouts: &BindgroupLayoutCache,
+    ) {
+        for kind in [
+            BindgroupKind::PbrMap,
+            BindgroupKind::Skybox,
+            BindgroupKind::SkyboxBlur,
+        ] {
+            self.bg[kind as usize] =
+                Self::create(gpu, buffer_cache, framebuffer_cache, layouts, kind);
+        }
+    }
+
     pub(crate) fn refresh_pbrmap_default(
         &mut self,
         gpu: &GpuContextRef,
