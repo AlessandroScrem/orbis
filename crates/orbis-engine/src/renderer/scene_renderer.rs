@@ -303,4 +303,67 @@ mod render_context_tests {
             &[ResourceId::ENTITY],
         ));
     }
+
+    #[test]
+    fn declared_read_allows_read_but_not_write() {
+        assert!(RenderContext::resource_access_is_declared(
+            ResourceId::HDR,
+            ResourceAccess::Read,
+            &[ResourceId::HDR],
+            &[],
+        ));
+        assert!(!RenderContext::resource_access_is_declared(
+            ResourceId::HDR,
+            ResourceAccess::Write,
+            &[ResourceId::HDR],
+            &[],
+        ));
+    }
+
+    #[test]
+    fn declared_write_allows_write_but_not_read() {
+        assert!(RenderContext::resource_access_is_declared(
+            ResourceId::ENTITY,
+            ResourceAccess::Write,
+            &[],
+            &[ResourceId::ENTITY],
+        ));
+        assert!(!RenderContext::resource_access_is_declared(
+            ResourceId::ENTITY,
+            ResourceAccess::Read,
+            &[],
+            &[ResourceId::ENTITY],
+        ));
+    }
+
+    #[test]
+    fn read_modify_write_declaration_allows_both_access_modes() {
+        let reads = [ResourceId::HDR];
+        let writes = [ResourceId::HDR];
+
+        assert!(RenderContext::resource_access_is_declared(
+            ResourceId::HDR,
+            ResourceAccess::Read,
+            &reads,
+            &writes,
+        ));
+        assert!(RenderContext::resource_access_is_declared(
+            ResourceId::HDR,
+            ResourceAccess::Write,
+            &reads,
+            &writes,
+        ));
+    }
+
+    #[test]
+    fn undeclared_resource_rejects_both_access_modes() {
+        for access in [ResourceAccess::Read, ResourceAccess::Write] {
+            assert!(!RenderContext::resource_access_is_declared(
+                ResourceId::DEPTH,
+                access,
+                &[ResourceId::HDR],
+                &[ResourceId::ENTITY],
+            ));
+        }
+    }
 }
