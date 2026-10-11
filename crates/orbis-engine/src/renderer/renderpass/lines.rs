@@ -34,7 +34,7 @@ impl RenderPass for LinesPass {
         let mut renderpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Axis Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: gpu_manager.get_framebuffer_view(FramebufferKind::Hdr),
+                view: ctx.framebuffer_view(FramebufferKind::Hdr),
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,

@@ -43,6 +43,7 @@ pub struct Runtime {
     pub material_preview_renderer: MaterialPreviewRenderer,
     pub imgui_render: ImguiRender,
     pub hdr_vec: Vec<(TextureId, IblId)>,
+    active_ibl_id: Option<IblId>,
     pub wait_for_exit: bool,
     pub editor_service: EditorService,
     texture_loader: TextureLoadService,
@@ -112,6 +113,7 @@ impl Runtime {
             pipeline_manager,
             shadow_manager,
             hdr_vec: Vec::new(),
+            active_ibl_id: None,
             wait_for_exit: false,
             readback: ReadbackManager::default(),
             picking: PickingService::default(),
@@ -172,6 +174,7 @@ impl Runtime {
                         width,
                         height,
                     );
+                    self.refresh_pbrmap_bindgroup();
                     app.on_resize(width, height);
                 }
                 RuntimeEvent::CloseRequested => {
@@ -184,6 +187,7 @@ impl Runtime {
                     info!("Set window title");
                 }
                 RuntimeEvent::UpdateIblMaps(id) => {
+                    self.active_ibl_id = Some(id.clone());
                     self.material_preview_renderer.invalidate_environment();
                     self.gpu_manager.replace_pbrmap_skybox_bindgroup(
                         self.ibl_manager.get(&id),
@@ -210,6 +214,16 @@ impl Runtime {
             }
         }
         window_title
+    }
+
+    fn refresh_pbrmap_bindgroup(&mut self) {
+        if let Some(id) = &self.active_ibl_id {
+            self.gpu_manager.replace_pbrmap_skybox_bindgroup(
+                self.ibl_manager.get(id),
+                &self.shadow_manager,
+                &self.gpu_context.device,
+            );
+        }
     }
 
     pub fn sync_gpu_assets(&mut self, asset_mgr: &mut AssetManager, bus: &mut EventBus) {

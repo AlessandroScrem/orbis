@@ -28,10 +28,8 @@ impl RenderPass for BuildMipmapsPass {
         }
 
         let device = ctx.device;
-        let src_texture = ctx.gpu_mgr.get_framebuffer_texture(FramebufferKind::Hdr);
-        let mip_texture = ctx
-            .gpu_mgr
-            .get_framebuffer_texture(FramebufferKind::OpaqueWithMips);
+        let src_texture = ctx.framebuffer_texture(FramebufferKind::Hdr);
+        let mip_texture = ctx.framebuffer_texture(FramebufferKind::OpaqueWithMips);
 
         let pipeline = ctx.pip_mgr.get_compute_pipeline(CsPipelineKind::CopyToMip0);
 
@@ -48,9 +46,7 @@ impl RenderPass for BuildMipmapsPass {
         // create with render pipeline
         else {
             let pipeline = ctx.pip_mgr.get_render_pipeline(PipelineKind::BuildMipmaps);
-            let sampler = ctx
-                .gpu_mgr
-                .get_framebuffer_sampler(FramebufferKind::OpaqueWithMips);
+            let sampler = ctx.framebuffer_sampler(FramebufferKind::OpaqueWithMips);
 
             render_mipmaps(device, encoder, pipeline, mip_texture, sampler);
         }

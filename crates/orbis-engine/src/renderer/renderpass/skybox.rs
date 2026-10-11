@@ -33,7 +33,7 @@ impl RenderPass for SkyboxPass {
         let mut renderpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Skybox Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: gpu_manager.get_framebuffer_view(FramebufferKind::Hdr),
+                view: ctx.framebuffer_view(FramebufferKind::Hdr),
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,
                     store: wgpu::StoreOp::Store,
@@ -42,7 +42,7 @@ impl RenderPass for SkyboxPass {
                 depth_slice: None,
             })],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: gpu_manager.get_framebuffer_view(FramebufferKind::Depth),
+                view: ctx.framebuffer_view(FramebufferKind::Depth),
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Load,
                     store: wgpu::StoreOp::Store,

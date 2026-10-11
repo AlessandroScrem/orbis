@@ -57,6 +57,22 @@ impl BindgroupCache {
                 Self::create(gpu, buffer_cache, framebuffer_cache, layouts, kind);
         }
     }
+
+    pub(crate) fn refresh_pbrmap_default(
+        &mut self,
+        gpu: &GpuContextRef,
+        buffer_cache: &BufferCache,
+        framebuffer_cache: &FramebufferCache,
+        layouts: &BindgroupLayoutCache,
+    ) {
+        self.bg[BindgroupKind::PbrMap as usize] = Self::create(
+            gpu,
+            buffer_cache,
+            framebuffer_cache,
+            layouts,
+            BindgroupKind::PbrMap,
+        );
+    }
 }
 
 impl BindgroupCache {

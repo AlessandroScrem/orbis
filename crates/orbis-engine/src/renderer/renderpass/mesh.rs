@@ -96,7 +96,7 @@ impl RenderPass for MeshPass {
             color_attachments: &[
                 // 0: opaque object
                 Some(wgpu::RenderPassColorAttachment {
-                    view: gpu_manager.get_framebuffer_view(FramebufferKind::Hdr),
+                    view: ctx.framebuffer_view(FramebufferKind::Hdr),
                     ops: wgpu::Operations {
                         load: self.config.hdr_load,
                         store: wgpu::StoreOp::Store,
@@ -106,7 +106,7 @@ impl RenderPass for MeshPass {
                 }),
                 // 1: entity ID
                 Some(wgpu::RenderPassColorAttachment {
-                    view: gpu_manager.get_framebuffer_view(FramebufferKind::EntityId),
+                    view: ctx.framebuffer_view(FramebufferKind::EntityId),
                     ops: wgpu::Operations {
                         load: self.config.entity_load,
                         store: wgpu::StoreOp::Store,
@@ -116,7 +116,7 @@ impl RenderPass for MeshPass {
                 }),
             ],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: gpu_manager.get_framebuffer_view(FramebufferKind::Depth),
+                view: ctx.framebuffer_view(FramebufferKind::Depth),
                 depth_ops: Some(wgpu::Operations {
                     load: self.config.depth_load,
                     store: wgpu::StoreOp::Store,

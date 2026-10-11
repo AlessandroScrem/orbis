@@ -48,7 +48,7 @@ impl RenderPass for OutlinePass {
         renderpass.set_pipeline(&pipeline);
         renderpass.set_bind_group(
             0,
-            gpu_manager.get_framebuffer_bg(FramebufferKind::EntityId),
+            ctx.framebuffer_bind_group(FramebufferKind::EntityId),
             &[],
         );
         renderpass.set_bind_group(1, gpu_manager.get_bindgroup(BindgroupKind::Perframe), &[]);

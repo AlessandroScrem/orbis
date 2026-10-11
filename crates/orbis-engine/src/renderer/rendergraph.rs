@@ -82,6 +82,7 @@ struct PassNode<'a> {
 #[derive(Clone, Copy)]
 enum EdgeKind {
     ReadAfterWrite,
+    WriteAfterRead,
     WriterOrder,
 }
 
@@ -168,29 +169,6 @@ impl RenderGraph {
         let mut deps = vec![Vec::new(); self.passes.len()];
 
         for res in resources.values() {
-            // Writers are ordered by registration. A reader observes the latest
-            // preceding writer; if none exists, it depends on the first writer.
-            for &reader in &res.readers {
-                let writer = res
-                    .writers
-                    .iter()
-                    .copied()
-                    .take_while(|writer| *writer < reader)
-                    .last()
-                    .or_else(|| res.writers.first().copied());
-
-                if let Some(writer) = writer {
-                    if writer != reader {
-                        deps[reader].push(Edge {
-                            from: reader,
-                            to: writer,
-                            resource: res.id,
-                            kind: EdgeKind::ReadAfterWrite,
-                        });
-                    }
-                }
-            }
-
             // Preserve the declared order for multiple writes to the same resource.
             for writers in res.writers.windows(2) {
                 let earlier = writers[0];
@@ -201,6 +179,42 @@ impl RenderGraph {
                     resource: res.id,
                     kind: EdgeKind::WriterOrder,
                 });
+            }
+
+            // A reader observes the latest preceding writer. If it is registered
+            // before every writer, it observes the first writer instead. In either
+            // case, force the reader to finish before the next write so unrelated
+            // dependencies cannot move a clobbering write ahead of that read.
+            for &reader in &res.readers {
+                let preceding_writer = res
+                    .writers
+                    .iter()
+                    .copied()
+                    .take_while(|writer| *writer < reader)
+                    .last();
+                let observed_writer = preceding_writer.or_else(|| res.writers.first().copied());
+
+                if let Some(writer) = observed_writer {
+                    if writer != reader {
+                        deps[reader].push(Edge {
+                            from: reader,
+                            to: writer,
+                            resource: res.id,
+                            kind: EdgeKind::ReadAfterWrite,
+                        });
+                    }
+                }
+
+                if let Some(next_writer) = res.writers.iter().copied().find(|writer| {
+                    *writer > reader && Some(*writer) != observed_writer
+                }) {
+                    deps[next_writer].push(Edge {
+                        from: next_writer,
+                        to: reader,
+                        resource: res.id,
+                        kind: EdgeKind::WriteAfterRead,
+                    });
+                }
             }
         }
 
@@ -273,6 +287,12 @@ impl RenderGraph {
                                 edge.resource,
                                 passes[edge.to].name()
                             ),
+                            EdgeKind::WriteAfterRead => format!(
+                                "{} writes {} after reader {}",
+                                passes[edge.from].name(),
+                                edge.resource,
+                                passes[edge.to].name()
+                            ),
                             EdgeKind::WriterOrder => format!(
                                 "{} writes {} after {}",
                                 passes[edge.from].name(),
@@ -310,9 +330,9 @@ impl RenderGraph {
 
     /// Compiles the graph and derives resource lifetimes in execution-order indices.
     ///
-    /// This is planning metadata only: render passes currently bind framebuffer
-    /// resources through GpuManager, so it must not be treated as physical GPU
-    /// allocation/aliasing until pass resource access is routed through a resolver.
+    /// The framebuffer cache consumes these lifetimes to resolve logical targets
+    /// to retained pool allocations before execution. RenderContext then checks
+    /// each pass's declared resource access while exposing those resolved targets.
     pub(crate) fn compile_lifetimes(
         &self,
     ) -> Result<(Vec<usize>, Vec<ResourceLifetime>), String> {
@@ -400,7 +420,9 @@ impl RenderGraph {
     ) -> Result<(), String> {
         let order = self.compile()?;
         for idx in order {
-            self.passes[idx].execute(encoder, ctx, frame);
+            let pass = &mut self.passes[idx];
+            ctx.begin_pass(pass.reads(), pass.writes());
+            pass.execute(encoder, ctx, frame);
         }
         Ok(())
     }
@@ -602,6 +624,50 @@ mod tests {
         assert_eq!(
             graph.compile_names().unwrap(),
             vec!["First writer", "Second writer", "Reader"]
+        );
+    }
+
+    #[test]
+    fn reader_is_ordered_before_the_next_writer() {
+        struct Pass {
+            name: &'static str,
+            reads: Vec<ResourceId>,
+            writes: Vec<ResourceId>,
+        }
+
+        impl RenderPass for Pass {
+            fn name(&self) -> &'static str { self.name }
+            fn reads(&self) -> &[ResourceId] { &self.reads }
+            fn writes(&self) -> &[ResourceId] { &self.writes }
+        }
+
+        let mut graph = RenderGraph::new();
+        graph.add_pass(Pass {
+            name: "First writer",
+            reads: vec![],
+            writes: vec![ResourceId::HDR],
+        });
+        graph.add_pass(Pass {
+            name: "Reader",
+            reads: vec![ResourceId::HDR],
+            writes: vec![],
+        });
+        graph.add_pass(Pass {
+            name: "Second writer",
+            reads: vec![],
+            writes: vec![ResourceId::HDR],
+        });
+
+        let (_, resources) = graph.build_graph();
+        let dependencies = graph.build_dependencies(&resources);
+        assert!(dependencies[2].iter().any(|edge| {
+            edge.to == 1
+                && edge.resource == ResourceId::HDR
+                && matches!(edge.kind, EdgeKind::WriteAfterRead)
+        }));
+        assert_eq!(
+            graph.compile_names().unwrap(),
+            vec!["First writer", "Reader", "Second writer"]
         );
     }
 

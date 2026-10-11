@@ -11,7 +11,7 @@ impl RenderPass for LightsIconPass {
         &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH]
     }
     fn writes(&self) -> &[ResourceId] {
-        &[ResourceId::HDR, ResourceId::DEPTH]
+        &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH]
     }
 
     fn execute(
@@ -33,7 +33,7 @@ impl RenderPass for LightsIconPass {
                 label: Some("LightIcon Render Pass"),
                 color_attachments: &[
                     Some(wgpu::RenderPassColorAttachment {
-                        view: gpu_manager.get_framebuffer_view(FramebufferKind::Hdr),
+                        view: ctx.framebuffer_view(FramebufferKind::Hdr),
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Load,
@@ -43,7 +43,7 @@ impl RenderPass for LightsIconPass {
                     }),
                     // 1: entity ID
                     Some(wgpu::RenderPassColorAttachment {
-                        view: gpu_manager.get_framebuffer_view(FramebufferKind::EntityId),
+                        view: ctx.framebuffer_view(FramebufferKind::EntityId),
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Load,
                             store: wgpu::StoreOp::Store,
@@ -53,7 +53,7 @@ impl RenderPass for LightsIconPass {
                     }),
                 ],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: gpu_manager.get_framebuffer_view(FramebufferKind::Depth),
+                    view: ctx.framebuffer_view(FramebufferKind::Depth),
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -74,5 +74,16 @@ impl RenderPass for LightsIconPass {
             renderpass.set_bind_group(1, light_bg, &[]);
             renderpass.draw(0..6, 0..light_uniform.count);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn declares_entity_id_attachment_as_written() {
+        let pass = LightsIconPass {};
+        assert!(pass.writes().contains(&ResourceId::ENTITY));
     }
 }

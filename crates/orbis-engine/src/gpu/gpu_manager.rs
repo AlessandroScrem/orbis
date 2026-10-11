@@ -50,8 +50,17 @@ impl GpuManager {
     }
 
     pub fn resize_frame(&mut self, gpu: &GpuContextRef, width: u32, height: u32) {
-        self.framebuffer_cache
-            .resize(gpu, &self.layout_cache, width, height);
+        if self
+            .framebuffer_cache
+            .resize(gpu, &self.layout_cache, width, height)
+        {
+            self.bindgroup_cache.refresh_pbrmap_default(
+                gpu,
+                &self.buffer_cache,
+                &self.framebuffer_cache,
+                &self.layout_cache,
+            );
+        }
     }
 
     /// Resolve the RenderGraph's transient framebuffer lifetimes into retained GPU textures.
