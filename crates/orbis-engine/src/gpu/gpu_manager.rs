@@ -54,6 +54,16 @@ impl GpuManager {
             .resize(gpu, &self.layout_cache, width, height);
     }
 
+    /// Resolve the RenderGraph's transient framebuffer lifetimes into retained GPU textures.
+    pub(crate) fn prepare_transient_frame(
+        &mut self,
+        gpu: &GpuContextRef,
+        lifetimes: &[(FramebufferKind, usize, usize)],
+    ) {
+        self.framebuffer_cache
+            .allocate_transient_frame(gpu, &self.layout_cache, lifetimes);
+    }
+
     pub fn get_bindgroup(&self, kind: BindgroupKind) -> &wgpu::BindGroup {
         self.bindgroup_cache.get(kind)
     }

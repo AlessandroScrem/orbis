@@ -3,6 +3,9 @@
 use super::*;
 use crate::renderer::framebuilder::FrameData;
 use crate::renderer::scene_renderer::RenderContext;
+use crate::renderer::transient_pool::{
+    TransientRequest, TransientResourcePool, TransientResourceResolver,
+};
 use std::collections::HashMap;
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]
@@ -35,6 +38,20 @@ impl fmt::Display for ResourceId {
 impl fmt::Debug for ResourceId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)
+    }
+}
+
+impl ResourceId {
+    /// Whether the graph owns this resource's per-frame allocation.
+    ///
+    /// Shadow maps are managed by ShadowManager, while pick buffers belong to
+    /// the picking/readback path. Neither may be allocated or aliased by the
+    /// transient render-target pool.
+    fn is_transient(self) -> bool {
+        matches!(
+            self,
+            Self::ENTITY | Self::DEPTH | Self::HDR | Self::OPAQUE
+        )
     }
 }
 
@@ -82,6 +99,14 @@ struct Edge {
 
 pub(crate) struct RenderGraph {
     passes: Vec<Box<dyn RenderPass>>,
+}
+
+/// Inclusive pass-order lifetime of a logical render-graph resource.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ResourceLifetime {
+    pub(crate) resource: ResourceId,
+    pub(crate) first_use: usize,
+    pub(crate) last_use: usize,
 }
 
 impl RenderGraph {
@@ -281,6 +306,87 @@ impl RenderGraph {
         }
 
         Ok(result)
+    }
+
+    /// Compiles the graph and derives resource lifetimes in execution-order indices.
+    ///
+    /// This is planning metadata only: render passes currently bind framebuffer
+    /// resources through GpuManager, so it must not be treated as physical GPU
+    /// allocation/aliasing until pass resource access is routed through a resolver.
+    pub(crate) fn compile_lifetimes(
+        &self,
+    ) -> Result<(Vec<usize>, Vec<ResourceLifetime>), String> {
+        let order = self.compile()?;
+        let mut execution_index = vec![0; order.len()];
+        for (position, &pass_index) in order.iter().enumerate() {
+            execution_index[pass_index] = position;
+        }
+
+        let mut lifetimes: HashMap<ResourceId, (usize, usize)> = HashMap::new();
+        for (pass_index, pass) in self.passes.iter().enumerate() {
+            let position = execution_index[pass_index];
+            for resource in pass.reads().iter().chain(pass.writes()) {
+                lifetimes
+                    .entry(*resource)
+                    .and_modify(|(first, last)| {
+                        *first = (*first).min(position);
+                        *last = (*last).max(position);
+                    })
+                    .or_insert((position, position));
+            }
+        }
+
+        let mut lifetimes: Vec<_> = lifetimes
+            .into_iter()
+            .map(|(resource, (first_use, last_use))| ResourceLifetime {
+                resource,
+                first_use,
+                last_use,
+            })
+            .collect();
+        lifetimes.sort_by_key(|lifetime| lifetime.resource.to_string());
+
+        Ok((order, lifetimes))
+    }
+
+    /// Allocates physical slots for the graph's logical resources using compiled lifetimes.
+    ///
+    /// The descriptor callback must include every GPU property relevant to compatibility.
+    /// The returned resolver maps graph resources to retained pool allocations. The
+    /// framebuffer cache uses the same lifetime/slot contract for GPU-backed resources.
+    pub(crate) fn allocate_transient_resources<D, R>(
+        &self,
+        pool: &mut TransientResourcePool<D, R>,
+        mut descriptor_for: impl FnMut(ResourceId) -> D,
+        create: impl FnMut(&D) -> R,
+    ) -> Result<TransientResourceResolver<ResourceId>, String>
+    where
+        D: Eq + Clone,
+    {
+        let (_, lifetimes) = self.compile_lifetimes()?;
+        let lifetimes: Vec<_> = lifetimes
+            .into_iter()
+            .filter(|lifetime| lifetime.resource.is_transient())
+            .collect();
+        let requests: Vec<_> = lifetimes
+            .iter()
+            .map(|lifetime| {
+                TransientRequest::new(
+                    descriptor_for(lifetime.resource),
+                    lifetime.first_use,
+                    lifetime.last_use,
+                )
+            })
+            .collect();
+
+        let slots = pool.allocate_frame(&requests, create);
+        let slots = lifetimes
+            .into_iter()
+            .zip(slots)
+            .map(|(lifetime, slot)| (lifetime.resource, slot))
+            .collect();
+
+        Ok(TransientResourceResolver::from_slots(slots))
     }
 
     // -------------------------
@@ -612,4 +718,109 @@ mod tests {
             "diagnostic should contain only the cycle"
         );
     }
+    #[test]
+    fn graph_allocates_slots_from_compiled_resource_lifetimes() {
+        struct Pass {
+            reads: Vec<ResourceId>,
+            writes: Vec<ResourceId>,
+        }
+        impl RenderPass for Pass {
+            fn name(&self) -> &'static str { "TestPass" }
+            fn reads(&self) -> &[ResourceId] { &self.reads }
+            fn writes(&self) -> &[ResourceId] { &self.writes }
+        }
+
+        let mut graph = RenderGraph::new();
+        graph.add_pass(Pass { reads: vec![], writes: vec![ResourceId::HDR] });
+        graph.add_pass(Pass { reads: vec![ResourceId::HDR], writes: vec![ResourceId::OPAQUE] });
+        let mut pool = TransientResourcePool::new();
+
+        let slots = graph
+            .allocate_transient_resources(&mut pool, |_| "same-format", |_| ())
+            .unwrap();
+
+        // HDR remains live through pass 1, where OPAQUE is first written.
+        assert_ne!(
+            slots.slot_for(&ResourceId::HDR),
+            slots.slot_for(&ResourceId::OPAQUE)
+        );
+        assert_eq!(pool.len(), 2);
+    }
+
+    #[test]
+    fn transient_allocation_excludes_externally_managed_resources() {
+        struct Pass(ResourceId);
+
+        impl RenderPass for Pass {
+            fn name(&self) -> &'static str {
+                "Resource writer"
+            }
+
+            fn reads(&self) -> &[ResourceId] {
+                &[]
+            }
+
+            fn writes(&self) -> &[ResourceId] {
+                std::slice::from_ref(&self.0)
+            }
+        }
+
+        let mut graph = RenderGraph::new();
+        graph.add_pass(Pass(ResourceId::SHADOWMAP));
+        graph.add_pass(Pass(ResourceId::HDR));
+
+        let mut pool = TransientResourcePool::new();
+        let slots = graph
+            .allocate_transient_resources(&mut pool, |_| "texture", |_| ())
+            .unwrap();
+
+        assert_eq!(slots.slot_for(&ResourceId::SHADOWMAP), None);
+        assert!(slots.slot_for(&ResourceId::HDR).is_some());
+        assert_eq!(pool.len(), 1);
+    }
+
+    #[test]
+    fn resource_lifetimes_use_compiled_execution_order() {
+        struct Pass {
+            name: &'static str,
+            reads: Vec<ResourceId>,
+            writes: Vec<ResourceId>,
+        }
+
+        impl RenderPass for Pass {
+            fn name(&self) -> &'static str {
+                self.name
+            }
+            fn reads(&self) -> &[ResourceId] {
+                &self.reads
+            }
+            fn writes(&self) -> &[ResourceId] {
+                &self.writes
+            }
+        }
+
+        let mut graph = RenderGraph::new();
+        // Registered in reverse dependency order to ensure lifetimes are
+        // computed from the compiled order rather than registration indices.
+        graph.add_pass(Pass {
+            name: "Reader",
+            reads: vec![ResourceId::HDR],
+            writes: vec![ResourceId::LDR],
+        });
+        graph.add_pass(Pass {
+            name: "Writer",
+            reads: vec![],
+            writes: vec![ResourceId::HDR],
+        });
+
+        let (order, lifetimes) = graph.compile_lifetimes().unwrap();
+        assert_eq!(order, vec![1, 0]);
+
+        let hdr = lifetimes.iter().find(|item| item.resource == ResourceId::HDR).unwrap();
+        assert_eq!((hdr.first_use, hdr.last_use), (0, 1));
+
+        let ldr = lifetimes.iter().find(|item| item.resource == ResourceId::LDR).unwrap();
+        assert_eq!((ldr.first_use, ldr.last_use), (1, 1));
+    }
+
 }

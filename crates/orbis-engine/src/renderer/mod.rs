@@ -6,6 +6,7 @@ pub(crate) mod render_objects;
 pub(crate) mod rendergraph;
 pub(crate) mod renderpass;
 pub(crate) mod scene_renderer;
+pub(crate) mod transient_pool;
 pub(crate) mod uniform;
 
 pub(crate) use framebuilder::FrameData;
