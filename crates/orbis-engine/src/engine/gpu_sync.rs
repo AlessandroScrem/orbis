@@ -393,12 +393,7 @@ fn rebuild_materials_using_texture(
         if let Some(material) = asset_mgr.get::<MaterialAsset>(material_id) {
             material_cache.insert(
                 material_id,
-                GpuMaterial::new(
-                    texture_cache,
-                    &material.desc,
-                    &gpu_context.device,
-                    layout,
-                ),
+                GpuMaterial::new(texture_cache, &material.desc, &gpu_context.device, layout),
             );
         }
     }

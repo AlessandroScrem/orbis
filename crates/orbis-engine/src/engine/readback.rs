@@ -299,13 +299,8 @@ mod tests {
         let first = (0x0000_0002_u64 << 32) | 0x0000_0003_u64;
         let second = (0x1234_5678_u64 << 32) | 0x9abc_def0_u64;
 
-        let encode = |id: u64| {
-            [
-                (id as u32).to_le_bytes(),
-                ((id >> 32) as u32).to_le_bytes(),
-            ]
-            .concat()
-        };
+        let encode =
+            |id: u64| [(id as u32).to_le_bytes(), ((id >> 32) as u32).to_le_bytes()].concat();
 
         let mut bytes = encode(first);
         bytes.extend_from_slice(&encode(0));

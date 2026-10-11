@@ -48,10 +48,7 @@ impl ResourceId {
     /// the picking/readback path. Neither may be allocated or aliased by the
     /// transient render-target pool.
     fn is_transient(self) -> bool {
-        matches!(
-            self,
-            Self::ENTITY | Self::DEPTH | Self::HDR | Self::OPAQUE
-        )
+        matches!(self, Self::ENTITY | Self::DEPTH | Self::HDR | Self::OPAQUE)
     }
 }
 
@@ -205,9 +202,12 @@ impl RenderGraph {
                     }
                 }
 
-                if let Some(next_writer) = res.writers.iter().copied().find(|writer| {
-                    *writer > reader && Some(*writer) != observed_writer
-                }) {
+                if let Some(next_writer) = res
+                    .writers
+                    .iter()
+                    .copied()
+                    .find(|writer| *writer > reader && Some(*writer) != observed_writer)
+                {
                     deps[next_writer].push(Edge {
                         from: next_writer,
                         to: reader,
@@ -333,9 +333,7 @@ impl RenderGraph {
     /// The framebuffer cache consumes these lifetimes to resolve logical targets
     /// to retained pool allocations before execution. RenderContext then checks
     /// each pass's declared resource access while exposing those resolved targets.
-    pub(crate) fn compile_lifetimes(
-        &self,
-    ) -> Result<(Vec<usize>, Vec<ResourceLifetime>), String> {
+    pub(crate) fn compile_lifetimes(&self) -> Result<(Vec<usize>, Vec<ResourceLifetime>), String> {
         let order = self.compile()?;
         let mut execution_index = vec![0; order.len()];
         for (position, &pass_index) in order.iter().enumerate() {
@@ -636,9 +634,15 @@ mod tests {
         }
 
         impl RenderPass for Pass {
-            fn name(&self) -> &'static str { self.name }
-            fn reads(&self) -> &[ResourceId] { &self.reads }
-            fn writes(&self) -> &[ResourceId] { &self.writes }
+            fn name(&self) -> &'static str {
+                self.name
+            }
+            fn reads(&self) -> &[ResourceId] {
+                &self.reads
+            }
+            fn writes(&self) -> &[ResourceId] {
+                &self.writes
+            }
         }
 
         let mut graph = RenderGraph::new();
@@ -791,14 +795,26 @@ mod tests {
             writes: Vec<ResourceId>,
         }
         impl RenderPass for Pass {
-            fn name(&self) -> &'static str { "TestPass" }
-            fn reads(&self) -> &[ResourceId] { &self.reads }
-            fn writes(&self) -> &[ResourceId] { &self.writes }
+            fn name(&self) -> &'static str {
+                "TestPass"
+            }
+            fn reads(&self) -> &[ResourceId] {
+                &self.reads
+            }
+            fn writes(&self) -> &[ResourceId] {
+                &self.writes
+            }
         }
 
         let mut graph = RenderGraph::new();
-        graph.add_pass(Pass { reads: vec![], writes: vec![ResourceId::HDR] });
-        graph.add_pass(Pass { reads: vec![ResourceId::HDR], writes: vec![ResourceId::OPAQUE] });
+        graph.add_pass(Pass {
+            reads: vec![],
+            writes: vec![ResourceId::HDR],
+        });
+        graph.add_pass(Pass {
+            reads: vec![ResourceId::HDR],
+            writes: vec![ResourceId::OPAQUE],
+        });
         let mut pool = TransientResourcePool::new();
 
         let slots = graph
@@ -882,11 +898,16 @@ mod tests {
         let (order, lifetimes) = graph.compile_lifetimes().unwrap();
         assert_eq!(order, vec![1, 0]);
 
-        let hdr = lifetimes.iter().find(|item| item.resource == ResourceId::HDR).unwrap();
+        let hdr = lifetimes
+            .iter()
+            .find(|item| item.resource == ResourceId::HDR)
+            .unwrap();
         assert_eq!((hdr.first_use, hdr.last_use), (0, 1));
 
-        let ldr = lifetimes.iter().find(|item| item.resource == ResourceId::LDR).unwrap();
+        let ldr = lifetimes
+            .iter()
+            .find(|item| item.resource == ResourceId::LDR)
+            .unwrap();
         assert_eq!((ldr.first_use, ldr.last_use), (1, 1));
     }
-
 }

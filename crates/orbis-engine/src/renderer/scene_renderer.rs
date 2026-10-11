@@ -37,11 +37,7 @@ impl RenderContext<'_> {
     fn assert_framebuffer_access(&self, kind: FramebufferKind) {
         let resource = Self::resource_for_framebuffer(kind);
         assert!(
-            Self::resource_is_declared(
-                resource,
-                &self.active_pass_reads,
-                &self.active_pass_writes,
-            ),
+            Self::resource_is_declared(resource, &self.active_pass_reads, &self.active_pass_writes,),
             "render pass accessed undeclared framebuffer resource {resource}"
         );
     }
@@ -194,17 +190,36 @@ mod tests {
         let renderer = SceneRenderer::new();
         let names = renderer.render_graph.compile_names().unwrap();
         let (_, lifetimes) = renderer.render_graph.compile_lifetimes().unwrap();
-        let position = |name: &str| names.iter().position(|candidate| candidate.as_str() == name).unwrap();
-        let lifetime = |resource| lifetimes.iter().find(|item| item.resource == resource).unwrap();
+        let position = |name: &str| {
+            names
+                .iter()
+                .position(|candidate| candidate.as_str() == name)
+                .unwrap()
+        };
+        let lifetime = |resource| {
+            lifetimes
+                .iter()
+                .find(|item| item.resource == resource)
+                .unwrap()
+        };
 
         let opaque = position("MeshPass Opaque");
         let transmission = position("MeshPass Transmission");
         let linearize = position("LinearizePass");
         let outline = position("OutlinePass");
 
-        assert!(opaque < transmission, "opaque pass must precede transmission: {names:?}");
-        assert!(transmission < linearize, "transmission must precede linearization: {names:?}");
-        assert!(linearize < outline, "linearization must precede outline: {names:?}");
+        assert!(
+            opaque < transmission,
+            "opaque pass must precede transmission: {names:?}"
+        );
+        assert!(
+            transmission < linearize,
+            "transmission must precede linearization: {names:?}"
+        );
+        assert!(
+            linearize < outline,
+            "linearization must precede outline: {names:?}"
+        );
 
         let hdr = lifetime(ResourceId::HDR);
         assert!(hdr.first_use <= opaque);
@@ -242,14 +257,16 @@ mod tests {
     }
 }
 
-
 #[cfg(test)]
 mod render_context_tests {
     use super::*;
 
     #[test]
     fn framebuffer_kinds_map_to_their_graph_resources() {
-        assert_eq!(RenderContext::resource_for_framebuffer(FramebufferKind::Hdr), ResourceId::HDR);
+        assert_eq!(
+            RenderContext::resource_for_framebuffer(FramebufferKind::Hdr),
+            ResourceId::HDR
+        );
         assert_eq!(
             RenderContext::resource_for_framebuffer(FramebufferKind::OpaqueWithMips),
             ResourceId::OPAQUE
@@ -258,7 +275,10 @@ mod render_context_tests {
             RenderContext::resource_for_framebuffer(FramebufferKind::EntityId),
             ResourceId::ENTITY
         );
-        assert_eq!(RenderContext::resource_for_framebuffer(FramebufferKind::Depth), ResourceId::DEPTH);
+        assert_eq!(
+            RenderContext::resource_for_framebuffer(FramebufferKind::Depth),
+            ResourceId::DEPTH
+        );
     }
 
     #[test]

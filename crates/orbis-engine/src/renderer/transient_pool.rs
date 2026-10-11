@@ -32,8 +32,10 @@ pub(crate) struct TransientTextureDescriptor {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum TransientTextureFormat {
     Rgba8Unorm,
+    #[allow(unused)]
     Rgba8UnormSrgb,
     Rgba16Float,
+    #[allow(unused)]
     Rgba32Float,
     Rg32Uint,
     Depth32Float,
@@ -44,17 +46,24 @@ pub(crate) enum TransientTextureUsage {
     RenderTarget,
     EntityId,
     DepthTarget,
+    #[allow(unused)]
     SampledTexture,
     SampledTextureStorage,
 }
 
 impl<D> TransientRequest<D> {
     pub(crate) fn new(descriptor: D, first_use: usize, last_use: usize) -> Self {
-        assert!(first_use <= last_use, "transient resource lifetime is inverted");
-        Self { descriptor, first_use, last_use }
+        assert!(
+            first_use <= last_use,
+            "transient resource lifetime is inverted"
+        );
+        Self {
+            descriptor,
+            first_use,
+            last_use,
+        }
     }
 }
-
 
 /// Maps logical resource identifiers to pool slots and resolves retained resources.
 ///
@@ -84,10 +93,12 @@ impl<K: Eq + Hash> TransientResourceResolver<K> {
         pool.get(self.slot_for(resource)?)
     }
 
+    #[allow(unused)]
     pub(crate) fn len(&self) -> usize {
         self.slots.len()
     }
-
+    
+    #[allow(unused)]
     pub(crate) fn is_empty(&self) -> bool {
         self.slots.is_empty()
     }
@@ -107,7 +118,9 @@ pub(crate) struct TransientResourcePool<D, R> {
 
 impl<D, R> Default for TransientResourcePool<D, R> {
     fn default() -> Self {
-        Self { entries: Vec::new() }
+        Self {
+            entries: Vec::new(),
+        }
     }
 }
 
@@ -174,7 +187,10 @@ impl<D: Eq + Clone, R> TransientResourcePool<D, R> {
     /// Used to adopt framebuffer allocations created during renderer initialization.
     pub(crate) fn insert(&mut self, descriptor: D, resource: R) -> usize {
         let slot = self.entries.len();
-        self.entries.push(Entry { descriptor, resource });
+        self.entries.push(Entry {
+            descriptor,
+            resource,
+        });
         slot
     }
 
@@ -182,10 +198,11 @@ impl<D: Eq + Clone, R> TransientResourcePool<D, R> {
         self.entries.get(slot).map(|entry| &entry.resource)
     }
 
+    #[allow(unused)]
     pub(crate) fn get_mut(&mut self, slot: usize) -> Option<&mut R> {
         self.entries.get_mut(slot).map(|entry| &mut entry.resource)
     }
-
+    #[allow(unused)]
     /// Number of retained resource allocations, including currently unused slots.
     pub(crate) fn len(&self) -> usize {
         self.entries.len()
@@ -362,13 +379,11 @@ mod resolver_tests {
     #[test]
     fn resolver_maps_logical_resources_to_pool_allocations() {
         let mut pool = TransientResourcePool::new();
-        let slots = pool.allocate_frame(
-            &[TransientRequest::new("rgba8", 0, 0)],
-            |_| String::from("physical allocation"),
-        );
-        let resolver = TransientResourceResolver::from_slots(
-            [("HDR", slots[0])].into_iter().collect(),
-        );
+        let slots = pool.allocate_frame(&[TransientRequest::new("rgba8", 0, 0)], |_| {
+            String::from("physical allocation")
+        });
+        let resolver =
+            TransientResourceResolver::from_slots([("HDR", slots[0])].into_iter().collect());
 
         assert_eq!(
             resolver.resolve(&"HDR", &pool).map(String::as_str),
