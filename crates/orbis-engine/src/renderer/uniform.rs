@@ -66,9 +66,9 @@ impl Default for Mat3Std140 {
     }
 }
 
-impl Into<[[f32; 4]; 3]> for Mat3Std140 {
-    fn into(self) -> [[f32; 4]; 3] {
-        self.m
+impl From<Mat3Std140> for [[f32; 4]; 3] {
+    fn from(val: Mat3Std140) -> Self {
+        val.m
     }
 }
 

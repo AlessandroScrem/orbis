@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use legion::Entity;
 
-#[allow(dead_code)]
+#[allow(clippy::large_enum_variant)]
 pub enum DomainEvent {
     Scene(SceneEvent),
     Camera(CameraEvent),
@@ -30,12 +30,14 @@ pub enum SelectionEvent {
     Select(Vec<u64>),
     SelectIbl(IblId),
 }
+
+#[allow(clippy::large_enum_variant)]
 pub enum AssetEvent {
     LoadGltf(PathBuf),
     AddIbl(PathBuf),
-    #[allow(dead_code)]
     UpdateMaterial(MaterialId, MaterialDesc),
 }
+
 pub enum EntityEvent {
     AddLight,
     RemoveEntity(Entity),

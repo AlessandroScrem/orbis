@@ -45,7 +45,7 @@ impl RenderPass for OutlinePass {
 
         let pipeline = pipeline_manager.get_render_pipeline(PipelineKind::Outline);
 
-        renderpass.set_pipeline(&pipeline);
+        renderpass.set_pipeline(pipeline);
         renderpass.set_bind_group(
             0,
             ctx.framebuffer_bind_group(FramebufferKind::EntityId),

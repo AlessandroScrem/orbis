@@ -7,7 +7,7 @@ use crate::assets::asset_manager::AssetManager;
 use crate::assets::{IblId, TextureId};
 use crate::editor::EditorConnection;
 use crate::engine::editor::{EditorBackend, EditorService};
-use crate::engine::engine::EventBus;
+use crate::engine::core::EventBus;
 use crate::engine::frame_preparation;
 use crate::engine::picking::PickingService;
 use crate::engine::presentation;
@@ -116,7 +116,7 @@ impl Runtime {
             active_ibl_id: None,
             wait_for_exit: false,
             readback: ReadbackManager::default(),
-            picking: PickingService::default(),
+            picking: PickingService,
             editor_service,
             texture_loader: TextureLoadService::new(),
             ui_statistics: UiStatistics::default(),
@@ -187,7 +187,7 @@ impl Runtime {
                     info!("Set window title");
                 }
                 RuntimeEvent::UpdateIblMaps(id) => {
-                    self.active_ibl_id = Some(id.clone());
+                    self.active_ibl_id = Some(id);
                     self.material_preview_renderer.invalidate_environment();
                     self.gpu_manager.replace_pbrmap_skybox_bindgroup(
                         self.ibl_manager.get(&id),
@@ -204,8 +204,7 @@ impl Runtime {
                     PickingService::request_selection(
                         &mut self.readback,
                         &self.gpu_context.as_ref(),
-                        &self
-                            .gpu_manager
+                        self.gpu_manager
                             .get_framebuffer_texture(crate::gpu::FramebufferKind::EntityId),
                         pos,
                         size,

@@ -138,7 +138,7 @@ pub struct EditorSettingsData {
     pub camera_far: f32,
 }
 
-#[allow(dead_code)]
+#[allow(clippy::enum_variant_names)]
 #[derive(Clone, Debug)]
 pub enum EditorEvent {
     TransformChanged {

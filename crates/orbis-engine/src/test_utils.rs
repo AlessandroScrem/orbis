@@ -63,10 +63,7 @@ pub fn save_texture(
 
     // Bytes per row per WGPU (padded a 256)
     let bytes_per_row_unpadded = width * pixel_size;
-    let bytes_per_row_padded = align_to(
-        bytes_per_row_unpadded,
-        wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u32,
-    );
+    let bytes_per_row_padded = align_to(bytes_per_row_unpadded, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
     let output_buffer_size = (bytes_per_row_padded * width) as wgpu::BufferAddress;
 
     let output_buffer_desc = wgpu::BufferDescriptor {
@@ -87,7 +84,7 @@ pub fn save_texture(
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
                 aspect: wgpu::TextureAspect::All,
-                texture: &texture,
+                texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d { x: 0, y: 0, z },
             },
@@ -234,10 +231,8 @@ pub fn save_cubemap_cross(
 
         // Bytes per row per WGPU (padded a 256)
         let bytes_per_row_unpadded = mip_size * pixel_size;
-        let bytes_per_row_padded = align_to(
-            bytes_per_row_unpadded,
-            wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u32,
-        );
+        let bytes_per_row_padded =
+            align_to(bytes_per_row_unpadded, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
         let output_buffer_size = (bytes_per_row_padded * mip_size) as wgpu::BufferAddress;
 
         // Bitmap croce
@@ -389,7 +384,7 @@ fn unpad_image(
 /// `alignment` must be a power of two.
 ///
 fn align_to(value: u32, alignment: u32) -> u32 {
-    ((value + alignment - 1) / alignment) * alignment
+    value.div_ceil(alignment) * alignment
 }
 
 /// Convert RG16F data to RGBA8 data.
@@ -523,13 +518,13 @@ mod tests {
             [0.0, 1.0, 1.0, 1.0], // -Z cyan
         ];
 
-        for face in 0..6 {
+        for (face, c) in colors.iter().enumerate() {
             let mut mip_size = base_size;
             let mut mip_level = 0;
 
             while mip_size > 0 {
                 let unaligned_bytes_per_row = mip_size * bytes_per_texel;
-                let bytes_per_row = ((unaligned_bytes_per_row + 255) / 256) * 256;
+                let bytes_per_row = unaligned_bytes_per_row.div_ceil(256) * 256;
                 let rows_per_image = mip_size;
                 let mut data = vec![0u8; (bytes_per_row * rows_per_image) as usize];
 
@@ -540,14 +535,12 @@ mod tests {
                         match format {
                             wgpu::TextureFormat::Rgba8Unorm
                             | wgpu::TextureFormat::Rgba8UnormSrgb => {
-                                let c = colors[face];
-                                data[offset + 0] = (c[0] * 255.0) as u8;
+                                data[offset] = (c[0] * 255.0) as u8;
                                 data[offset + 1] = (c[1] * 255.0) as u8;
                                 data[offset + 2] = (c[2] * 255.0) as u8;
                                 data[offset + 3] = (c[3] * 255.0) as u8;
                             }
                             wgpu::TextureFormat::Rgba16Float => {
-                                let c = colors[face];
                                 for i in 0..4 {
                                     let half = f16::from_f32(c[i] * (1.0 - mip_level as f32 * 0.2));
                                     let bytes = half.to_le_bytes();
@@ -556,7 +549,6 @@ mod tests {
                                 }
                             }
                             wgpu::TextureFormat::Rg16Float => {
-                                let c = colors[face];
                                 for i in 0..2 {
                                     let half = f16::from_f32(c[i] * (1.0 - mip_level as f32 * 0.2));
                                     let bytes = half.to_le_bytes();
@@ -565,7 +557,6 @@ mod tests {
                                 }
                             }
                             wgpu::TextureFormat::Rgba32Float => {
-                                let c = colors[face];
                                 for i in 0..4 {
                                     let bytes =
                                         (c[i] * (1.0 - mip_level as f32 * 0.2)).to_le_bytes();
@@ -618,7 +609,7 @@ mod tests {
     #[test]
     fn should_save_texture_dummy_rgba8unorm_to_file() {
         let (device, queue) = get_device_and_queue();
-        let _rgba = create_debug_cube_texture(device, &queue, wgpu::TextureFormat::Rgba8Unorm, 64);
+        let _rgba = create_debug_cube_texture(device, queue, wgpu::TextureFormat::Rgba8Unorm, 64);
 
         #[cfg(feature = "save_tests")]
         save_texture(&device, &queue, "testimage.png", &_rgba, 0).unwrap();
@@ -629,7 +620,7 @@ mod tests {
         let (device, queue) = get_device_and_queue();
 
         let _rgba =
-            create_debug_cube_texture(device, &queue, wgpu::TextureFormat::Rgba8UnormSrgb, 64);
+            create_debug_cube_texture(device, queue, wgpu::TextureFormat::Rgba8UnormSrgb, 64);
 
         #[cfg(feature = "save_tests")]
         save_texture(&device, &queue, "testimage.png", &_rgba, 0).unwrap();
@@ -639,7 +630,7 @@ mod tests {
     fn should_save_texture_dummy_rg16f_to_file() {
         let (device, queue) = get_device_and_queue();
 
-        let _rg16f = create_debug_cube_texture(device, &queue, wgpu::TextureFormat::Rg16Float, 64);
+        let _rg16f = create_debug_cube_texture(device, queue, wgpu::TextureFormat::Rg16Float, 64);
 
         #[cfg(feature = "save_tests")]
         save_texture(&device, &queue, "testimage.png", &_rg16f, 0).unwrap();
@@ -650,7 +641,7 @@ mod tests {
         let (device, queue) = get_device_and_queue();
 
         let _rgba16f =
-            create_debug_cube_texture(device, &queue, wgpu::TextureFormat::Rgba16Float, 64);
+            create_debug_cube_texture(device, queue, wgpu::TextureFormat::Rgba16Float, 64);
 
         #[cfg(feature = "save_tests")]
         save_texture(&device, &queue, "testimage.png", &_rgba16f, 0).unwrap();
@@ -660,7 +651,7 @@ mod tests {
     fn should_save_cubetexture_dummy_rgba8unorm_to_file() {
         let (device, queue) = get_device_and_queue();
 
-        let _rgba8 = create_debug_cube_texture(device, &queue, wgpu::TextureFormat::Rgba8Unorm, 64);
+        let _rgba8 = create_debug_cube_texture(device, queue, wgpu::TextureFormat::Rgba8Unorm, 64);
 
         #[cfg(feature = "save_tests")]
         save_cubemap_cross(&device, &queue, "testimage.png", &_rgba8).unwrap();
@@ -671,7 +662,7 @@ mod tests {
         let (device, queue) = get_device_and_queue();
 
         let _rgba16f =
-            create_debug_cube_texture(device, &queue, wgpu::TextureFormat::Rgba16Float, 64);
+            create_debug_cube_texture(device, queue, wgpu::TextureFormat::Rgba16Float, 64);
 
         #[cfg(feature = "save_tests")]
         save_cubemap_cross(&device, &queue, "testimage.png", &_rgba16f).unwrap();

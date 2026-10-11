@@ -1,7 +1,7 @@
 use crate::EntityRawU64;
 use crate::app::App;
 use crate::editor::{EditorCommand, EditorEvent, EntityId, Query, QueryResult};
-use crate::engine::{editor::EditorBackend, engine::EventBus};
+use crate::engine::{editor::EditorBackend, core::EventBus};
 
 impl EditorBackend for App {
     fn query(&self, query: &Query) -> QueryResult {

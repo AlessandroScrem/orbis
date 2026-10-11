@@ -50,7 +50,7 @@ impl RenderPass for LinesPass {
 
         let pipeline = pipeline_manager.get_render_pipeline(PipelineKind::Lines);
 
-        renderpass.set_pipeline(&pipeline);
+        renderpass.set_pipeline(pipeline);
         renderpass.set_bind_group(0, gpu_manager.get_bindgroup(BindgroupKind::Camera), &[]);
 
         renderpass.set_vertex_buffer(0, gpu_manager.get_buffer(BufferKind::Lines).slice(0..));

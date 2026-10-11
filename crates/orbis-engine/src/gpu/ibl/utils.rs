@@ -185,7 +185,7 @@ pub fn create_texture(
         depth_or_array_layers,
     };
 
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
+    device.create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
         size: extent,
         mip_level_count,
@@ -196,8 +196,7 @@ pub fn create_texture(
             | wgpu::TextureUsages::TEXTURE_BINDING
             | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
-    });
-    texture
+    })
 }
 
 pub fn create_pipeline(
@@ -206,8 +205,8 @@ pub fn create_pipeline(
     shader: ShaderModule,
     label: &str,
 ) -> wgpu::RenderPipeline {
-    // let shader = device.create_shader_module(wgpu::include_wgsl!("shaders/prefilter_map.wgsl"));
-    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some(label),
         vertex: wgpu::VertexState {
             module: &shader,
@@ -232,9 +231,7 @@ pub fn create_pipeline(
         depth_stencil: None,
         cache: None,
         multiview_mask: None,
-    });
-
-    pipeline
+    })
 }
 
 #[cfg(test)]

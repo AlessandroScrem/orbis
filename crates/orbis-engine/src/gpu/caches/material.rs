@@ -76,7 +76,7 @@ impl GpuMaterialCache {
     }
 
     pub fn remove(&mut self, id: ResourceId) {
-        if let Some(_) = self.map.remove(&id) {
+        if self.map.remove(&id).is_some() {
             self.stats.remove(GpuMaterial::estimated_size());
         }
     }
@@ -133,8 +133,8 @@ pub fn create_material_bindgroup_from_desc(
 
     let textures = resolve_textures(texture_cache, material_desc);
 
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        layout: &bind_group_layout,
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        layout: bind_group_layout,
         label: Some("Material  bind_group"),
         entries: &[
             // uniform buffer
@@ -183,8 +183,7 @@ pub fn create_material_bindgroup_from_desc(
                 resource: wgpu::BindingResource::TextureView(&textures[Volume].view),
             },
         ],
-    });
-    bind_group
+    })
 }
 
 pub fn create_material_uniform_from_desc(
@@ -193,12 +192,11 @@ pub fn create_material_uniform_from_desc(
 ) -> wgpu::Buffer {
     let uniform = MaterialUniform::from(material_desc);
 
-    let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("Material Uniform Buffer"),
         contents: bytemuck::bytes_of(&uniform),
         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-    });
-    uniform_buffer
+    })
 }
 
 #[cfg(test)]

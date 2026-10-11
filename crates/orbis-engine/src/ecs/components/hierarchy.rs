@@ -1,4 +1,4 @@
-use super::components::*;
+use super::types::*;
 use crate::ResourceId;
 use crate::assets::asset_manager::AssetManager;
 use crate::prelude::warn;
@@ -123,15 +123,15 @@ type ResourceIdCollectionCollection = Vec<ResourceId>;
 
 fn collect_mesh_asset_ids_from_entity(
     world: &legion::World,
-    entities: &Vec<Entity>,
+    entities: &[Entity],
 ) -> ResourceIdCollectionCollection {
     let mut ids = vec![];
 
-    for e in entities.clone() {
-        if let Ok(entry) = world.entry_ref(e) {
-            if let Ok(mesh) = entry.get_component::<MeshComponent>() {
-                ids.push(mesh.handle);
-            }
+    for e in entities {
+        if let Ok(entry) = world.entry_ref(e.to_owned())
+            && let Ok(mesh) = entry.get_component::<MeshComponent>()
+        {
+            ids.push(mesh.handle);
         }
     }
     ids
@@ -159,11 +159,11 @@ fn collect_mesh_entities_from_root(entity: Entity, world: &mut legion::World) ->
     fn collect_subtree(world: &legion::World, root: Entity, out: &mut Vec<Entity>) {
         out.push(root);
 
-        if let Ok(entry) = world.entry_ref(root) {
-            if let Ok(h) = entry.get_component::<HierarchyComponent>() {
-                for &child in &h.children {
-                    collect_subtree(world, child, out);
-                }
+        if let Ok(entry) = world.entry_ref(root)
+            && let Ok(h) = entry.get_component::<HierarchyComponent>()
+        {
+            for &child in &h.children {
+                collect_subtree(world, child, out);
             }
         }
     }

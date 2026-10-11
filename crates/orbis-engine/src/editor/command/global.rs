@@ -1,3 +1,5 @@
+
+#[allow(clippy::enum_variant_names)]
 #[derive(Clone, Debug)]
 pub enum GlobalCommand {
     SetLightEnable(bool),

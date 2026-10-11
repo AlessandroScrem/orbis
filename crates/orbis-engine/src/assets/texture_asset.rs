@@ -91,7 +91,7 @@ pub fn create_texture(path: std::path::PathBuf, usage: TextureUsage) -> TextureA
         mipmaps: true,
     };
 
-    TextureAsset { desc: desc }
+    TextureAsset { desc }
 }
 
 impl TextureAsset {

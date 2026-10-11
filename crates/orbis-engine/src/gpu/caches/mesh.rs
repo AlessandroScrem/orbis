@@ -49,24 +49,24 @@ pub struct GpuMesh {
 impl GpuMesh {
     pub fn new(
         device: &wgpu::Device,
-        vertices: &Vec<MeshVertexData>,
-        indices: &Vec<u32>,
+        vertices: &[MeshVertexData],
+        indices: &[u32],
     ) -> GpuMesh {
         let vertexbuffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Mesh Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertices),
+            contents: bytemuck::cast_slice(vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
         let indexbuffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Mesh Index Buffer"),
-            contents: &bytemuck::cast_slice(&indices),
+            contents: bytemuck::cast_slice(indices),
             usage: wgpu::BufferUsages::INDEX,
         });
 
         let indexcount = indices.len() as u32;
         let estimated_size =
-            vertices.len() * size_of::<MeshVertexData>() + indices.len() * size_of::<u32>();
+            std::mem::size_of_val(vertices) + std::mem::size_of_val(indices);
 
         GpuMesh {
             vertexbuffer,

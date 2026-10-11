@@ -30,7 +30,7 @@ impl BindgroupCache {
         layouts: &BindgroupLayoutCache,
     ) -> Self {
         let bg: Vec<wgpu::BindGroup> = BindgroupKind::iter()
-            .map(|kind| Self::create(gpu, buffer_cache, &framebuffer_cache, layouts, kind))
+            .map(|kind| Self::create(gpu, buffer_cache, framebuffer_cache, layouts, kind))
             .collect();
         Self { bg }
     }
@@ -188,12 +188,12 @@ impl BindgroupCache {
                         // opaque scene sampler
                         wgpu::BindGroupEntry {
                             binding: 4,
-                            resource: wgpu::BindingResource::Sampler(&scene_sampler),
+                            resource: wgpu::BindingResource::Sampler(scene_sampler),
                         },
                         // opaque scene texture
                         wgpu::BindGroupEntry {
                             binding: 5,
-                            resource: wgpu::BindingResource::TextureView(&scene_view),
+                            resource: wgpu::BindingResource::TextureView(scene_view),
                         },
                         // shadowmap sampler
                         wgpu::BindGroupEntry {

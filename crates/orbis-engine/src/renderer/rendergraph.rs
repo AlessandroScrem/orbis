@@ -8,6 +8,7 @@ use crate::renderer::transient_pool::{
 };
 use std::collections::HashMap;
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]
 pub enum ResourceId {
     ENTITY,
@@ -191,15 +192,15 @@ impl RenderGraph {
                     .last();
                 let observed_writer = preceding_writer.or_else(|| res.writers.first().copied());
 
-                if let Some(writer) = observed_writer {
-                    if writer != reader {
-                        deps[reader].push(Edge {
-                            from: reader,
-                            to: writer,
-                            resource: res.id,
-                            kind: EdgeKind::ReadAfterWrite,
-                        });
-                    }
+                if let Some(writer) = observed_writer
+                    && writer != reader
+                {
+                    deps[reader].push(Edge {
+                        from: reader,
+                        to: writer,
+                        resource: res.id,
+                        kind: EdgeKind::ReadAfterWrite,
+                    });
                 }
 
                 if let Some(next_writer) = res
@@ -706,11 +707,26 @@ mod tests {
             reads: vec![ResourceId::HDR],
             writes: vec![],
         });
+
         graph.add_pass(Pass {
             name: "Second writer",
             reads: vec![],
             writes: vec![ResourceId::HDR],
         });
+
+        let (_, resources) = graph.build_graph();
+        let dependencies = graph.build_dependencies(&resources);
+
+        assert!(dependencies[1].iter().any(|edge| {
+            edge.to == 0
+                && edge.resource == ResourceId::HDR
+                && matches!(edge.kind, EdgeKind::ReadAfterWrite)
+        }));
+        assert!(dependencies[2].iter().any(|edge| {
+            edge.to == 1
+                && edge.resource == ResourceId::HDR
+                && matches!(edge.kind, EdgeKind::WriteAfterRead)
+        }));
 
         assert_eq!(
             graph.compile_names().unwrap(),
@@ -822,6 +838,59 @@ mod tests {
             .unwrap();
 
         // HDR remains live through pass 1, where OPAQUE is first written.
+        assert_ne!(
+            slots.slot_for(&ResourceId::HDR),
+            slots.slot_for(&ResourceId::OPAQUE)
+        );
+        assert_eq!(pool.len(), 2);
+    }
+
+    #[test]
+    fn graph_keeps_incompatible_formats_in_separate_slots() {
+        struct Pass {
+            reads: Vec<ResourceId>,
+            writes: Vec<ResourceId>,
+        }
+        impl RenderPass for Pass {
+            fn name(&self) -> &'static str {
+                "TestPass"
+            }
+            fn reads(&self) -> &[ResourceId] {
+                &self.reads
+            }
+            fn writes(&self) -> &[ResourceId] {
+                &self.writes
+            }
+        }
+
+        let mut graph = RenderGraph::new();
+        graph.add_pass(Pass {
+            reads: vec![],
+            writes: vec![ResourceId::HDR],
+        });
+        graph.add_pass(Pass {
+            reads: vec![ResourceId::HDR],
+            writes: vec![],
+        });
+        graph.add_pass(Pass {
+            reads: vec![],
+            writes: vec![ResourceId::OPAQUE],
+        });
+
+        let mut pool = TransientResourcePool::new();
+
+        let slots = graph
+            .allocate_transient_resources(
+                &mut pool,
+                |res| match res {
+                    ResourceId::HDR => "format_A",
+                    ResourceId::OPAQUE => "format_B",
+                    _ => "other",
+                },
+                |_| (),
+            )
+            .unwrap();
+
         assert_ne!(
             slots.slot_for(&ResourceId::HDR),
             slots.slot_for(&ResourceId::OPAQUE)

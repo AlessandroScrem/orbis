@@ -19,7 +19,7 @@ impl EntityRawU64 for Entity {
 
     fn from_raw_u64(raw: u64) -> Self {
         unsafe {
-            let raw64: u64 = raw as u64;
+            let raw64: u64 = raw;
             mem::transmute::<u64, Entity>(raw64)
         }
     }
@@ -57,7 +57,6 @@ mod tests {
     // Ricostruzione come nello shader: high << 32 | low
     // Da usare nello shader per ricostruire entity_id (u64) da vec2<u32>
     fn test_reconstruct_u64_from_u32() {
-        use std::u32;
         // Valore u64 più grande di u32::MAX
         let original: u64 = u32::MAX as u64 + 48; // 4.294.967.343
 

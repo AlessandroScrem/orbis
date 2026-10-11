@@ -8,7 +8,7 @@ use crate::assets::MaterialAsset;
 use crate::ecs::components::light;
 use crate::ecs::components::*;
 use crate::engine::RuntimeEvent;
-use crate::engine::engine::EventBus;
+use crate::engine::core::EventBus;
 use crate::prelude::*;
 use crate::scene;
 
@@ -53,10 +53,10 @@ pub fn handle_scene_event(app: &mut App, event: SceneEvent, bus: &mut EventBus) 
             }
         }
         SceneEvent::Save => {
-            if app.current_scene.save().is_ok() {
-                if let Some(path) = app.current_scene.filename.clone() {
-                    add_recent_file(app, path.into());
-                }
+            if app.current_scene.save().is_ok()
+                && let Some(path) = app.current_scene.filename.clone()
+            {
+                add_recent_file(app, path.into());
             }
         }
         SceneEvent::Open(path) => {

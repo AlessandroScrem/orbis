@@ -13,7 +13,7 @@ fn copy_texture_to_cpu(
 
     // Bytes per row per WGPU (padded a 256)
     let bytes_per_row = width * byte_per_pixel;
-    let padded_bytes_per_row = align_to(bytes_per_row, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u32);
+    let padded_bytes_per_row = align_to(bytes_per_row, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
 
     let output_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         size: (padded_bytes_per_row * width) as u64,
@@ -28,7 +28,7 @@ fn copy_texture_to_cpu(
     encoder.copy_texture_to_buffer(
         wgpu::TexelCopyTextureInfo {
             aspect: wgpu::TextureAspect::All,
-            texture: &texture,
+            texture,
             mip_level: 0,
             origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
         },
@@ -105,7 +105,7 @@ pub fn bytes_per_pixel(format: wgpu::TextureFormat) -> anyhow::Result<u32> {
 /// `alignment` must be a power of two.
 ///
 pub fn align_to(value: u32, alignment: u32) -> u32 {
-    ((value + alignment - 1) / alignment) * alignment
+    value.div_ceil(alignment) * alignment
 }
 
 /// Remove padding from data read from texture  eg: copy_texture_to_buffer().

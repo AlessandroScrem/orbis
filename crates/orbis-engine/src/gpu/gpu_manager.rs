@@ -91,9 +91,9 @@ impl GpuManager {
 
     pub fn get_ibl_skybox_bg(&self, blur_flag: bool) -> &wgpu::BindGroup {
         if blur_flag {
-            &self.bindgroup_cache.get(BindgroupKind::SkyboxBlur)
+            self.bindgroup_cache.get(BindgroupKind::SkyboxBlur)
         } else {
-            &self.bindgroup_cache.get(BindgroupKind::Skybox)
+            self.bindgroup_cache.get(BindgroupKind::Skybox)
         }
     }
 
@@ -194,7 +194,7 @@ fn create_pbrmap_bindgroup(
         // shadowmap texture
         wgpu::BindGroupEntry {
             binding: 7,
-            resource: wgpu::BindingResource::TextureView(&shadow_map_views),
+            resource: wgpu::BindingResource::TextureView(shadow_map_views),
         },
     ];
 

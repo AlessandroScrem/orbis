@@ -345,13 +345,12 @@ mod tests {
             let ctan_fov = 1.0f32 / f32::tan(fovy * 0.5);
             let k: f32 = far / (far - near);
 
-            let proj = Mat4::from_cols(
+            Mat4::from_cols(
                 vec4(ctan_fov / aspect, 0.0, 0.0, 0.0),
                 vec4(0.0, ctan_fov, 0.0, 0.0),
                 vec4(0.0, 0.0, k, 1.0),
                 vec4(0.0, 0.0, -k * near, 0.0),
-            );
-            proj
+            )
         }
 
         // LH: forward = +Z, clip depth in [0,1]

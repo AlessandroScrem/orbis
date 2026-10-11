@@ -2,7 +2,7 @@ use crate::editor::{
     EditorCommand, EditorEvent, EditorResourceStatsData, EditorServiceChannels,
     EditorStatisticsData, EntityId, Query, QueryResponse, QueryResult,
 };
-use crate::engine::engine::EventBus;
+use crate::engine::core::EventBus;
 
 pub trait EditorBackend {
     fn query(&self, query: &Query) -> QueryResult;

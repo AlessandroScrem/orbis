@@ -247,15 +247,14 @@ impl MaterialPreviewRenderer {
         };
 
         let revision = gpu_material.revision();
-        if let Some(preview) = self.cache.get(&material) {
-            if preview.material_revision == revision
-                && preview.environment_revision == self.environment_revision
-            {
-                if publish_cached_preview(&mut self.displayed_material, material) {
-                    return Some(preview.target.texture(&gpu_context.device));
-                }
-                return None;
+        if let Some(preview) = self.cache.get(&material)
+            && preview.material_revision == revision
+            && preview.environment_revision == self.environment_revision
+        {
+            if publish_cached_preview(&mut self.displayed_material, material) {
+                return Some(preview.target.texture(&gpu_context.device));
             }
+            return None;
         }
 
         let target = self
@@ -288,13 +287,15 @@ impl MaterialPreviewRenderer {
             ..Default::default()
         };
 
-        let mut lights = crate::renderer::uniform::LightsUniform::default();
-        lights.enabled = 1;
-        lights.count = 1;
+        let mut lights = crate::renderer::uniform::LightsUniform {
+            enabled: 1,
+            count: 1,
+            ..Default::default()
+        };
         lights.lights[0].color = [1.0, 1.0, 1.0];
         lights.lights[0].position = [2.0, 2.0, 3.0];
         lights.lights[0].directional = 0;
-        lights.lights[0].cast_shadow = 0;
+        lights.lights[0].cast_shadow = 0;       
 
         let instance = VertexInstance::new(Mat4::identity(), 0);
         gpu_context

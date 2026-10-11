@@ -69,7 +69,7 @@ impl RenderPass for LightsIconPass {
             let perframe_bg = gpu_manager.get_bindgroup(BindgroupKind::Perframe);
             let light_bg = gpu_manager.get_bindgroup(BindgroupKind::LightIcon);
 
-            renderpass.set_pipeline(&pipeline);
+            renderpass.set_pipeline(pipeline);
             renderpass.set_bind_group(0, perframe_bg, &[]);
             renderpass.set_bind_group(1, light_bg, &[]);
             renderpass.draw(0..6, 0..light_uniform.count);

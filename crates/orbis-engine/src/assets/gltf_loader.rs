@@ -105,7 +105,7 @@ fn load_gltf_internal<P: AsRef<Path>>(
             }
 
             let g_mat = primitive.material().index().unwrap_or_default();
-            let material_id = material_map.get(&g_mat).unwrap().clone();
+            let material_id = *material_map.get(&g_mat).unwrap();
 
             submeshes.push(SubMesh {
                 index_range: index_start as u32..index_end as u32,
@@ -503,8 +503,7 @@ fn create_texture(
     };
 
     let texture = TextureAsset {
-        desc: desc,
-        // state: TextureState::MetaOnly,
+        desc,
     };
     Some(asset_mgr.add(texture))
 }
@@ -670,7 +669,7 @@ fn create_materials<P: AsRef<Path>>(
     asset_mgr: &mut AssetManager,
 ) -> HashMap<usize, ResourceId> {
     let mut materials = HashMap::new();
-    for material in gltf.materials().into_iter() {
+    for material in gltf.materials() {
         let mat_id = material.index().unwrap_or_default();
         let asset_id = create_material(&material, asset_mgr, &path);
         materials.insert(mat_id, asset_id);

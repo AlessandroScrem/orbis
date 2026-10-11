@@ -173,10 +173,7 @@ impl MaterialDesc {
     }
 
     pub fn is_transparent(&self) -> bool {
-        match self.alpha_mode {
-            AlphaMode::Blend => true,
-            _ => false,
-        }
+        matches!(self.alpha_mode, AlphaMode::Blend)
     }
 
     pub fn is_volume(&self) -> bool {
@@ -303,7 +300,7 @@ impl Default for TextureTransform {
     }
 }
 impl TextureTransform {
-    pub fn to_mat3_std140(&self) -> Mat3Std140 {
+    pub fn to_mat3_std140(self) -> Mat3Std140 {
         let t = Mat3::from_translation(self.offset.into());
         let r = Mat3::from_angle_z(Rad(self.rotation));
         let s = Mat3::from_nonuniform_scale(self.scale[0], self.scale[1]);

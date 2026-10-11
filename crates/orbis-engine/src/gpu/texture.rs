@@ -140,7 +140,7 @@ impl<'a> GpuTextureBuilder<'a> {
     pub fn from_cpu(data: TextureData) -> GpuTextureBuilder<'static> {
         GpuTextureBuilder {
             label: None,
-            format: data.format.clone(),
+            format: data.format,
             width: data.width,
             height: data.height,
             dimension: Dimension::D2,
@@ -154,7 +154,7 @@ impl<'a> GpuTextureBuilder<'a> {
     pub fn from_static(data: &'static StaticTexture) -> GpuTextureBuilder<'static> {
         GpuTextureBuilder {
             label: None,
-            format: data.format.clone(),
+            format: data.format,
             width: data.width,
             height: data.height,
             dimension: Dimension::D2,

@@ -1,6 +1,6 @@
 use crate::assets::asset_manager::AssetManager;
 use crate::engine::editor::EditorBackend;
-use crate::engine::engine::EventBus;
+use crate::engine::core::EventBus;
 use crate::renderer::render_objects::RenderObjects;
 use legion::Entity;
 use std::path::PathBuf;

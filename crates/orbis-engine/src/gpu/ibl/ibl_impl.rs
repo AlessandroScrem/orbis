@@ -261,7 +261,7 @@ impl EquirectangularToCubemap {
 
         // create dest: HDR cubemap texture
         let target_texture = utils::create_cube_texture(
-            &device,
+            device,
             "Hdr_Cube",
             cube_size,
             mip_level_count,
@@ -366,7 +366,7 @@ impl IrrarianceMap {
         });
 
         let target_texture = utils::create_cube_texture(
-            &device,
+            device,
             "Irradiance_Cube",
             Self::TEXTURE_SIZE,
             mip_level_count,

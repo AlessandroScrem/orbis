@@ -170,10 +170,10 @@ impl<A: RuntimeApp + Default> ApplicationHandler for MyApplication<A> {
                 });
             }
             WindowEvent::RedrawRequested => {
-                if !is_minimized(&window) {
-                    if let Some(title) = self.engine.tick(false) {
-                        set_window_title(&window, &title);
-                    }
+                if !is_minimized(&window)
+                    && let Some(title) = self.engine.tick(false)
+                {
+                    set_window_title(&window, &title);
                 }
             }
             WindowEvent::DroppedFile(path) => {

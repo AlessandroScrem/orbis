@@ -168,13 +168,13 @@ impl UiCommands {
     }
 
     fn apply_transform_changed(&mut self, entity: EntityId, transform: TransformData) {
-        if let Some(inspector) = &mut self.inspector {
-            if inspector.entity == entity {
-                for section in &mut inspector.sections {
-                    if let InspectorSection::Transform(current) = section {
-                        *current = transform.clone();
-                        break;
-                    }
+        if let Some(inspector) = &mut self.inspector
+            && inspector.entity == entity
+        {
+            for section in &mut inspector.sections {
+                if let InspectorSection::Transform(current) = section {
+                    *current = transform.clone();
+                    break;
                 }
             }
         }
@@ -183,21 +183,21 @@ impl UiCommands {
     fn apply_name_changed(&mut self, entity: EntityId, name: String) {
         self.request(QuerySlot::Hierarchy, Query::Hierarchy);
 
-        if let Some(inspector) = &mut self.inspector {
-            if inspector.entity == entity {
-                inspector.name = name.clone();
-            }
+        if let Some(inspector) = &mut self.inspector
+            && inspector.entity == entity
+        {
+            inspector.name = name.clone();
         }
     }
 
     fn apply_light_changed(&mut self, entity: EntityId, light: LightData) {
-        if let Some(inspector) = &mut self.inspector {
-            if inspector.entity == entity {
-                for section in &mut inspector.sections {
-                    if let InspectorSection::Light(current) = section {
-                        *current = light.clone();
-                        break;
-                    }
+        if let Some(inspector) = &mut self.inspector
+            && inspector.entity == entity
+        {
+            for section in &mut inspector.sections {
+                if let InspectorSection::Light(current) = section {
+                    *current = light.clone();
+                    break;
                 }
             }
         }

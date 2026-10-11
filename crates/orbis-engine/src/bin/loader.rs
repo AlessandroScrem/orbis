@@ -1,7 +1,7 @@
 use std::path::Path;
 
 fn main() {
-    let paths = vec![
+    let paths = [
         Path::new(orbis_engine::asset_path!("skybox/right.png")),
         Path::new(orbis_engine::asset_path!("skybox/left.png")),
         Path::new(orbis_engine::asset_path!("skybox/top.png")),

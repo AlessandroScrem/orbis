@@ -114,10 +114,10 @@ fn draw_light(ui: &Ui, ctx: &UiContext, entity: EntityId, light: &mut LightData)
         });
     }
 
-    if light.cast_shadow {
-        if let Some(texture) = ctx.textures.shadow_map {
-            Image::new(texture, [200.0, 200.0]).build(ui);
-        }
+    if light.cast_shadow
+        && let Some(texture) = ctx.textures.shadow_map
+    {
+        Image::new(texture, [200.0, 200.0]).build(ui);
     }
 }
 

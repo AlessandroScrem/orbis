@@ -69,10 +69,10 @@ impl SettingsUi {
     }
 
     fn draw(&mut self, ui: &Ui, ctx: &mut UiContext, settings: &EditorSettingsData) {
-        if let Some(stats) = self.resource_stats.as_ref() {
-            if ui.collapsing_header("Resource Stats", TreeNodeFlags::DEFAULT_OPEN) {
-                self.draw_resource_stats(ui, stats);
-            }
+        if let Some(stats) = self.resource_stats.as_ref()
+            && ui.collapsing_header("Resource Stats", TreeNodeFlags::DEFAULT_OPEN)
+        {
+            self.draw_resource_stats(ui, stats);
         }
 
         if ui.collapsing_header("Statistics", TreeNodeFlags::DEFAULT_OPEN) {
@@ -250,13 +250,12 @@ impl SettingsUi {
                 }
             }
 
-            if ui.button("Add IBL") {
-                if let Some(path) = rfd::FileDialog::new()
+            if ui.button("Add IBL")
+                && let Some(path) = rfd::FileDialog::new()
                     .add_filter("hdr", &["hdr"])
                     .pick_file()
-                {
-                    ctx.commands.send(AssetCommand::AddIbl(path));
-                }
+            {
+                ctx.commands.send(AssetCommand::AddIbl(path));
             }
             ui.separator();
         }

@@ -2,7 +2,7 @@ use stb_image::image::load_from_memory_with_depth;
 
 /// Load HDR16 stb_image
 pub fn decode_image_rgbaf32(buffer: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
-    let image = image::load_from_memory(&buffer)
+    let image = image::load_from_memory(buffer)
         .map_err(|e| format!("Failed to decode image: {e}"))?
         .to_rgba32f();
 

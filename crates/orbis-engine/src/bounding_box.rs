@@ -115,7 +115,7 @@ mod tests {
 
     #[test]
     fn should_bounding_box_from_single_point() {
-        let points = vec![[1.0, 2.0, 3.0]];
+        let points = [[1.0, 2.0, 3.0]];
 
         let aabb = BoundingBox::from_points(points.iter());
 

@@ -13,7 +13,7 @@ impl ResourceStats {
     }
     pub fn remove(&mut self, size: usize) -> &mut Self {
         if self.count > 0 {
-            let result = self.estimated_bytes.checked_sub(size).unwrap_or(0);
+            let result = self.estimated_bytes.saturating_sub(size);
             self.estimated_bytes = result;
             self.count -= 1;
         }

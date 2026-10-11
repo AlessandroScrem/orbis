@@ -106,7 +106,7 @@ impl IblManager {
     }
 
     pub fn create(&self, hdr: &GpuTexture, gpu: &GpuContextRef) -> GpuIbl {
-        let cube_map = EquirectangularToCubemap::build(&hdr, gpu.device, gpu.queue, 512);
+        let cube_map = EquirectangularToCubemap::build(hdr, gpu.device, gpu.queue, 512);
         let _irradiance_map = IrrarianceMap::build(&cube_map, gpu.device, gpu.queue);
         let _prefilter_map = PrefilterMap::build(gpu.device, gpu.queue, &cube_map);
         let cube_map_view = cube_map.create_view(&wgpu::TextureViewDescriptor {

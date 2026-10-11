@@ -4,7 +4,7 @@ use crate::ecs::components::{
     GlobalModelComponent, Hidden, HierarchyComponent, TransformComponent,
 };
 
-use super::components::{LightComponent, TagComponent};
+use super::types::{LightComponent, TagComponent};
 use legion::world::World;
 
 const DEFAULT_LIGHT_NAME: &str = "Light";

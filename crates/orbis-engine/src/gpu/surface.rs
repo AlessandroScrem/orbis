@@ -15,7 +15,7 @@ impl GpuSurface {
         let surface = instance
             .create_surface(window.clone())
             .expect("unable to create Surface");
-        let surface_caps = surface.get_capabilities(&adapter);
+        let surface_caps = surface.get_capabilities(adapter);
         let surface_format = surface_caps.formats[0];
         let size = window.inner_size();
 

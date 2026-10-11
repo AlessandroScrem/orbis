@@ -52,6 +52,7 @@ impl<K: Eq + Hash + Clone + 'static> KeyMap for TypedKeyMap<K> {
     }
 }
 
+#[derive(Default)]
 pub struct KeyRegistry {
     inner: HashMap<TypeId, Box<dyn KeyMap>>,
 }
@@ -77,14 +78,6 @@ impl KeyRegistry {
     pub fn remove(&mut self, id: ResourceId) {
         for map in self.inner.values_mut() {
             map.remove(id);
-        }
-    }
-}
-
-impl Default for KeyRegistry {
-    fn default() -> Self {
-        Self {
-            inner: HashMap::new(),
         }
     }
 }
@@ -155,7 +148,7 @@ impl AssetManager {
 
     fn stats_mut<T: Asset>(&mut self) -> &mut ResourceStats {
         let id = TypeId::of::<T>();
-        self.stats.entry(id).or_insert_with(ResourceStats::default)
+        self.stats.entry(id).or_default()
     }
 }
 
@@ -446,7 +439,7 @@ mod tests {
         mgr.remove(id);
 
         // deve essere rimosso
-        assert!(mgr.ref_count.get(&id).is_none());
+        assert!(!mgr.ref_count.contains_key(&id));
 
         // evento remove
         let ev = mgr.events.back().unwrap();
@@ -467,7 +460,7 @@ mod tests {
 
         mgr.release(id);
         // ora rimosso
-        assert!(mgr.ref_count.get(&id).is_none());
+        assert!(!mgr.ref_count.contains_key(&id));
     }
 
     #[test]
@@ -483,7 +476,7 @@ mod tests {
         mgr.remove(id);
 
         // nessun crash
-        assert!(mgr.ref_count.get(&id).is_none());
+        assert!(!mgr.ref_count.contains_key(&id));
     }
 
     #[test]
@@ -579,7 +572,7 @@ mod tests {
             mipmaps: true,
         };
 
-        let texture = TextureAsset { desc: desc };
+        let texture = TextureAsset { desc };
 
         let a = mgr.add(texture.clone());
         let b = mgr.add(texture);
@@ -607,7 +600,7 @@ mod tests {
             mipmaps: true,
         };
 
-        let texture = TextureAsset { desc: desc };
+        let texture = TextureAsset { desc };
 
         let id = mgr.add(texture);
 
@@ -673,7 +666,7 @@ mod tests {
         assert!(mgr.events.is_empty());
 
         assert_eq!(gpu_materials.len(), 1);
-        assert!(gpu_materials.get(&id).is_some())
+        assert!(gpu_materials.contains_key(&id))
     }
 
     #[test]
@@ -716,7 +709,7 @@ mod tests {
         assert!(mgr.events.is_empty());
 
         assert_eq!(gpu_meshes.len(), 1);
-        assert!(gpu_meshes.get(&id).is_some())
+        assert!(gpu_meshes.contains_key(&id))
     }
 }
 
@@ -745,9 +738,9 @@ mod test_api {
         material: Option<ResourceId>,
     }
 
-    /// -----------------------------
-    /// IMPLEMENT Asset TRAIT
-    /// -----------------------------
+    // -----------------------------
+    // IMPLEMENT Asset TRAIT
+    // -----------------------------
 
     impl Asset for Texture {
         type Key = String;
@@ -825,7 +818,7 @@ mod test_api {
 
         mgr.remove(mesh2);
         // ✔ mesh2 tolto → materiale ancora vivo
-        assert!(mgr.ref_count.get(&mat).is_none());
+        assert!(!mgr.ref_count.contains_key(&mat));
     }
 
     #[test]
@@ -856,7 +849,7 @@ mod test_api {
 
         mgr.remove(mat2);
         // texture distrutta
-        assert!(mgr.ref_count.get(&tex).is_none());
+        assert!(!mgr.ref_count.contains_key(&tex));
     }
 
     #[test]
@@ -868,7 +861,7 @@ mod test_api {
         });
 
         // add crea già l'asset vivo (ref = 1 o 0 dipende da design, ma NON 0 stabile)
-        assert!(mgr.ref_count.get(&tex).is_some());
+        assert!(mgr.ref_count.contains_key(&tex));
 
         // primo retain
         mgr.retain(tex);
@@ -876,7 +869,7 @@ mod test_api {
 
         // release finale → DEVE essere rimosso
         mgr.release(tex);
-        assert!(mgr.ref_count.get(&tex).is_none());
+        assert!(!mgr.ref_count.contains_key(&tex));
     }
 
     #[test]

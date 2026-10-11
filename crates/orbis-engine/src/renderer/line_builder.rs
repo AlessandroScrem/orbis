@@ -95,7 +95,7 @@ impl LineDrawable for LightRenderObject {
     fn emit(&self, sink: &mut dyn LineSink) {
         use crate::colors;
 
-        let mut corners = vec![
+        let mut corners = [
             Vec3::new(-1.0, -1.0, 0.0), // Near-bottom-left
             Vec3::new(1.0, -1.0, 0.0),  // Near-bottom-right
             Vec3::new(1.0, 1.0, 0.0),   // Near-top-right

@@ -51,8 +51,8 @@ impl PipelineDesc {
         shader: wgpu::ShaderModule,
         buffers: &[wgpu::VertexBufferLayout<'static>],
     ) -> wgpu::RenderPipeline {
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(&label),
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(label),
             layout,
             vertex: wgpu::VertexState {
                 module: &shader,
@@ -75,9 +75,7 @@ impl PipelineDesc {
             depth_stencil: self.depth_stencil,
             multiview_mask: None,
             cache: None,
-        });
-
-        render_pipeline
+        })
     }
 }
 
@@ -125,8 +123,8 @@ impl PipelineExt {
         shader: wgpu::ShaderModule,
         buffers: &[wgpu::VertexBufferLayout<'static>],
     ) -> wgpu::RenderPipeline {
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(&label),
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(label),
             layout,
             vertex: wgpu::VertexState {
                 module: &shader,
@@ -145,9 +143,7 @@ impl PipelineExt {
             depth_stencil: self.depth_stencil,
             multiview_mask: None,
             cache: None,
-        });
-
-        render_pipeline
+        })
     }
 }
 

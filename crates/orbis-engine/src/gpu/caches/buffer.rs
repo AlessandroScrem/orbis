@@ -70,7 +70,7 @@ impl BufferCache {
     }
 
     pub fn write<T: bytemuck::Pod>(&self, queue: &wgpu::Queue, kind: BufferKind, data: &[T]) {
-        let byte_len = data.len() * std::mem::size_of::<T>();
+        let byte_len = std::mem::size_of_val(data);
         let buffer = &self.buffers[kind as usize];
 
         assert!(

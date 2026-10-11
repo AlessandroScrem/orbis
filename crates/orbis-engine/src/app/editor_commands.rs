@@ -11,7 +11,7 @@ use crate::ecs::components::{LightComponent, TagComponent, TransformComponent};
 use crate::editor::{
     EditorCommand, EditorEvent, EntityCommand, MaterialCommand, PickCommand, TransformData,
 };
-use crate::engine::engine::EventBus;
+use crate::engine::core::EventBus;
 
 impl App {
     pub(crate) fn dispatch_editor_command(
@@ -64,14 +64,13 @@ impl App {
                     .current_scene
                     .world
                     .entry_mut(EntityRawU64::from_raw_u64(entity))
+                    && let Ok(component) = entry.get_component_mut::<TransformComponent>()
                 {
-                    if let Ok(component) = entry.get_component_mut::<TransformComponent>() {
-                        *component = TransformComponent {
-                            position: transform.translation,
-                            rotation: transform.rotation,
-                            scale: transform.scale,
-                        };
-                    }
+                    *component = TransformComponent {
+                        position: transform.translation,
+                        rotation: transform.rotation,
+                        scale: transform.scale,
+                    };
                 }
                 Some(EditorEvent::TransformChanged { entity, transform })
             }
@@ -80,22 +79,21 @@ impl App {
                     .current_scene
                     .world
                     .entry_mut(EntityRawU64::from_raw_u64(entity))
+                    && let Ok(tag) = entry.get_component_mut::<TagComponent>()
                 {
-                    if let Ok(tag) = entry.get_component_mut::<TagComponent>() {
-                        tag.name = name.clone();
-                    }
+                    tag.name = name.clone();
                 }
                 Some(EditorEvent::NameChanged { entity, name })
             }
             EntityCommand::SetLight { entity, light } => {
                 let raw_entity = EntityRawU64::from_raw_u64(entity);
-                if let Ok(mut entry) = self.current_scene.world.entry_mut(raw_entity) {
-                    if let Ok(component) = entry.get_component_mut::<LightComponent>() {
-                        component.color = light.color;
-                        component.directional = light.directional;
-                        component.cast_shadow = light.cast_shadow;
-                        component.frustum = light.frustum;
-                    }
+                if let Ok(mut entry) = self.current_scene.world.entry_mut(raw_entity)
+                    && let Ok(component) = entry.get_component_mut::<LightComponent>()
+                {
+                    component.color = light.color;
+                    component.directional = light.directional;
+                    component.cast_shadow = light.cast_shadow;
+                    component.frustum = light.frustum;
                 }
                 Some(EditorEvent::LightChanged { entity, light })
             }

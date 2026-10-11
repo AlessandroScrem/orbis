@@ -8,7 +8,6 @@ use std::{fs, time::Duration};
 /// cargo bench --bench hdr_bench --quiet -- conversion
 /// cargo bench --bench hdr_bench --quiet -- load
 /// '''
-
 fn load_hdr_to_buffer_u8(path: &str) -> Vec<u8> {
     fs::read(path).expect("Failed to read HDR file")
 }

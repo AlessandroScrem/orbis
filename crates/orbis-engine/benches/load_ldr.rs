@@ -6,7 +6,6 @@ use std::fs;
 /// '''rust, ignore
 /// cargo bench --bench hdr_bench
 /// '''
-
 fn load_ldr_to_buffer_u8(path: &str) -> Vec<u8> {
     fs::read(path).expect("Failed to read LDR file")
 }

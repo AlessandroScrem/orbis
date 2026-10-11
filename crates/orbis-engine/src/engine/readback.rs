@@ -342,7 +342,7 @@ mod tests {
 
         // invio 100 richieste
         for _ in 0..100 {
-            pick.request(&gpu, &texture, (15, 15));
+            pick.request(gpu, &texture, (15, 15));
         }
 
         let mut count = 0;
@@ -414,7 +414,7 @@ mod tests {
 
         req_mgr.request_selection(gpu, &texture, (0, 0), (10, 8));
 
-        req_mgr.request_pick(&gpu, &texture, (15, 15));
+        req_mgr.request_pick(gpu, &texture, (15, 15));
 
         let mut pick_received = false;
         let mut selection_received = false;

@@ -1,5 +1,5 @@
-pub mod components;
+pub mod types;
 pub(crate) mod hierarchy;
 pub(crate) mod light;
 
-pub(crate) use components::*;
+pub(crate) use types::*;

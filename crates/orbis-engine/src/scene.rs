@@ -12,7 +12,7 @@ use crate::{
         gltf_loader::{GltfGroup, NodeData, load_gltf},
     },
     ecs::components::*,
-    engine::{RuntimeEvent, engine::EventBus},
+    engine::{RuntimeEvent, core::EventBus},
     renderer::render_objects::RenderObjects,
 };
 
@@ -204,12 +204,12 @@ pub fn spawn_scene(
             HierarchyComponent::default(),
             GlobalModelComponent::default(),
         ));
-        if *node_idx == 0 {
-            if let Some(mut entry) = world.entry(entity) {
-                entry.add_component(SceneComponent {
-                    path: loaded.name.clone(),
-                });
-            }
+        if *node_idx == 0
+            && let Some(mut entry) = world.entry(entity)
+        {
+            entry.add_component(SceneComponent {
+                path: loaded.name.clone(),
+            });
         }
         node_to_entity[*node_idx] = Some(entity);
     }
@@ -220,9 +220,7 @@ pub fn spawn_scene(
             let entity = node_to_entity[*node_idx].unwrap();
             let mesh_id = &loaded.meshes[mesh_idx];
             if let Some(mut entry) = world.entry(entity) {
-                entry.add_component(MeshComponent {
-                    handle: mesh_id.clone(),
-                });
+                entry.add_component(MeshComponent { handle: *mesh_id });
                 if let Some(mesh_asset) = asset_mgr.get::<MeshAsset>(*mesh_id) {
                     let bbox = &mesh_asset.desc.bounds;
                     entry.add_component(BoundingBoxComponent {
@@ -243,15 +241,15 @@ pub fn spawn_scene(
             let Some(child) = node_to_entity[child_idx] else {
                 continue;
             };
-            if let Ok(mut entry) = world.entry_mut(parent) {
-                if let Ok(h) = entry.get_component_mut::<HierarchyComponent>() {
-                    h.children.push(child);
-                }
+            if let Ok(mut entry) = world.entry_mut(parent)
+                && let Ok(h) = entry.get_component_mut::<HierarchyComponent>()
+            {
+                h.children.push(child);
             }
-            if let Ok(mut entry) = world.entry_mut(child) {
-                if let Ok(h) = entry.get_component_mut::<HierarchyComponent>() {
-                    h.parent = Some(parent);
-                }
+            if let Ok(mut entry) = world.entry_mut(child)
+                && let Ok(h) = entry.get_component_mut::<HierarchyComponent>()
+            {
+                h.parent = Some(parent);
             }
         }
     }

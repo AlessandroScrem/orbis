@@ -7,7 +7,7 @@ use crate::assets::texture_asset::{TextureAsset, TextureDesc};
 use crate::assets::texture_upload::{TextureData, load_and_decode};
 use crate::assets::{IblAsset, IblId, TextureId};
 use crate::engine::RuntimeEvent;
-use crate::engine::engine::EventBus;
+use crate::engine::core::EventBus;
 use crate::gpu::texture::GpuTextureBuilder;
 use crate::gpu::{
     BindgroupLayoutKind, GpuCache, GpuContext, GpuManager, GpuMaterial, GpuMaterialCache, GpuMesh,
@@ -112,6 +112,7 @@ impl TextureLoadService {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_gpu_assets(
     asset_mgr: &mut AssetManager,
     bus: &mut EventBus,
@@ -281,6 +282,60 @@ pub(crate) fn sync_gpu_assets(
     });
 }
 
+fn select_fallback_ibl(hdr_vec: &[(TextureId, IblId)], bus: &mut EventBus) {
+    if let Some((_, id)) = hdr_vec.first() {
+        bus.send_domain(Selection(SelectIbl(*id)));
+        bus.send_runtime(RuntimeEvent::UpdateIblMaps(*id));
+    } else {
+        bus.send_runtime(RuntimeEvent::ClearIblMaps);
+    }
+}
+
+fn rebuild_materials_using_texture(
+    asset_mgr: &AssetManager,
+    texture_cache: &GpuTextureCache,
+    material_cache: &mut GpuMaterialCache,
+    gpu_context: &GpuContext,
+    gpu_manager: &GpuManager,
+    texture_id: TextureId,
+) {
+    let dependent_materials = asset_mgr
+        .iter::<MaterialAsset>()
+        .filter(|(_, material)| material.desc.get_textures().contains(&texture_id))
+        .map(|(material_id, _)| material_id)
+        .collect::<Vec<_>>();
+
+    let layout = gpu_manager.get_bindgroup_layout(BindgroupLayoutKind::Material);
+    for material_id in dependent_materials {
+        if let Some(material) = asset_mgr.get::<MaterialAsset>(material_id) {
+            material_cache.insert(
+                material_id,
+                GpuMaterial::new(texture_cache, &material.desc, &gpu_context.device, layout),
+            );
+        }
+    }
+}
+
+fn register_gpu_texture(
+    cache: &mut GpuTextureCache,
+    imgui: &mut ImguiRender,
+    device: &wgpu::Device,
+    id: TextureId,
+    texture: crate::gpu::texture::GpuTexture,
+) {
+    cache.insert(id, texture);
+    let texture = cache
+        .get(id)
+        .expect("registered GPU texture must be available");
+    imgui.registry.add(&mut imgui.renderer, device, id, texture);
+}
+
+fn remove_gpu_texture(cache: &mut GpuTextureCache, imgui: &mut ImguiRender, id: TextureId) {
+    cache.remove(id);
+    imgui.registry.remove(&mut imgui.renderer, id);
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::{DecodedTexture, TextureLoadService};
@@ -365,55 +420,3 @@ mod tests {
     }
 }
 
-fn select_fallback_ibl(hdr_vec: &[(TextureId, IblId)], bus: &mut EventBus) {
-    if let Some((_, id)) = hdr_vec.first() {
-        bus.send_domain(Selection(SelectIbl(*id)));
-        bus.send_runtime(RuntimeEvent::UpdateIblMaps(*id));
-    } else {
-        bus.send_runtime(RuntimeEvent::ClearIblMaps);
-    }
-}
-
-fn rebuild_materials_using_texture(
-    asset_mgr: &AssetManager,
-    texture_cache: &GpuTextureCache,
-    material_cache: &mut GpuMaterialCache,
-    gpu_context: &GpuContext,
-    gpu_manager: &GpuManager,
-    texture_id: TextureId,
-) {
-    let dependent_materials = asset_mgr
-        .iter::<MaterialAsset>()
-        .filter(|(_, material)| material.desc.get_textures().contains(&texture_id))
-        .map(|(material_id, _)| material_id)
-        .collect::<Vec<_>>();
-
-    let layout = gpu_manager.get_bindgroup_layout(BindgroupLayoutKind::Material);
-    for material_id in dependent_materials {
-        if let Some(material) = asset_mgr.get::<MaterialAsset>(material_id) {
-            material_cache.insert(
-                material_id,
-                GpuMaterial::new(texture_cache, &material.desc, &gpu_context.device, layout),
-            );
-        }
-    }
-}
-
-fn register_gpu_texture(
-    cache: &mut GpuTextureCache,
-    imgui: &mut ImguiRender,
-    device: &wgpu::Device,
-    id: TextureId,
-    texture: crate::gpu::texture::GpuTexture,
-) {
-    cache.insert(id, texture);
-    let texture = cache
-        .get(id)
-        .expect("registered GPU texture must be available");
-    imgui.registry.add(&mut imgui.renderer, device, id, texture);
-}
-
-fn remove_gpu_texture(cache: &mut GpuTextureCache, imgui: &mut ImguiRender, id: TextureId) {
-    cache.remove(id);
-    imgui.registry.remove(&mut imgui.renderer, id);
-}

@@ -55,7 +55,7 @@ impl RenderPass for SkyboxPass {
         let pipeline = pipeline_manager.get_render_pipeline(PipelineKind::Skybox);
         let skybox_bind_group = gpu_manager.get_ibl_skybox_bg(skybox_blur);
 
-        renderpass.set_pipeline(&pipeline);
+        renderpass.set_pipeline(pipeline);
         renderpass.set_bind_group(0, gpu_manager.get_bindgroup(BindgroupKind::Perframe), &[]);
         renderpass.set_bind_group(1, skybox_bind_group, &[]);
         renderpass.draw(0..36, 0..1);

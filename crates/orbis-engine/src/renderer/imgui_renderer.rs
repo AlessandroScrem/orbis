@@ -78,6 +78,94 @@ impl ImGuiTextureRegistry {
     }
 }
 
+
+pub struct ImguiRender {
+    pub renderer: imgui_wgpu::Renderer,
+    pub registry: ImGuiTextureRegistry,
+}
+
+impl ImguiRender {
+    pub fn new(
+        device: &Device,
+        queue: &Queue,
+        window: &winit::window::Window,
+        context: &mut imgui::Context,
+        texture_format: wgpu::TextureFormat,
+    ) -> Self {
+        let renderer_config = RendererConfig {
+            texture_format,
+            ..Default::default()
+        };
+
+        let hidpi_factor = window.scale_factor();
+        println!("Scale factor {}", hidpi_factor);
+        let font_size = (9.0 * hidpi_factor) as f32;
+
+        context.fonts().add_font(&[
+            imgui::FontSource::DefaultFontData {
+                config: Some(imgui::FontConfig {
+                    name: Some("Default".into()),
+                    oversample_h: 1,
+                    pixel_snap_h: true,
+                    size_pixels: font_size,
+                    ..Default::default()
+                }),
+            },
+            imgui::FontSource::TtfData {
+                data: include_bytes!(asset_path!("fonts/codicon.ttf")),
+                size_pixels: 9.0,
+                config: Some(imgui::FontConfig {
+                    name: Some("Codicons".into()),
+                    pixel_snap_h: true,
+                    oversample_h: 1,
+                    glyph_ranges: imgui::FontGlyphRanges::from_slice(&[0xEA60, 0xEC1E, 0]),
+                    ..imgui::FontConfig::default()
+                }),
+            },
+        ]);
+
+        let renderer = imgui_wgpu::Renderer::new(context, device, queue, renderer_config);
+        let registry = ImGuiTextureRegistry::new();
+
+        Self { renderer, registry }
+    }
+
+    pub fn render(
+        &mut self,
+        draw_data: &imgui::DrawData,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        device: &Device,
+        queue: &Queue,
+    ) {
+        let frame_view = target;
+
+        let mut pass = {
+            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("ImGui Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: frame_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                ..Default::default()
+            })
+        };
+
+        match self.renderer.render(draw_data, queue, device, &mut pass) {
+            Ok(()) => {}
+            Err(e) => {
+                error!("Imgui Render failed: {:?}", e);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,92 +238,5 @@ mod tests {
         );
         assert_eq!(registry.get(resource_id), None);
         assert_eq!(registry.remove(&mut renderer, resource_id), None);
-    }
-}
-
-pub struct ImguiRender {
-    pub renderer: imgui_wgpu::Renderer,
-    pub registry: ImGuiTextureRegistry,
-}
-
-impl ImguiRender {
-    pub fn new(
-        device: &Device,
-        queue: &Queue,
-        window: &winit::window::Window,
-        context: &mut imgui::Context,
-        texture_format: wgpu::TextureFormat,
-    ) -> Self {
-        let renderer_config = RendererConfig {
-            texture_format,
-            ..Default::default()
-        };
-
-        let hidpi_factor = window.scale_factor();
-        println!("Scale factor {}", hidpi_factor);
-        let font_size = (9.0 * hidpi_factor) as f32;
-
-        context.fonts().add_font(&[
-            imgui::FontSource::DefaultFontData {
-                config: Some(imgui::FontConfig {
-                    name: Some("Default".into()),
-                    oversample_h: 1,
-                    pixel_snap_h: true,
-                    size_pixels: font_size,
-                    ..Default::default()
-                }),
-            },
-            imgui::FontSource::TtfData {
-                data: include_bytes!(asset_path!("fonts/codicon.ttf")),
-                size_pixels: 9.0,
-                config: Some(imgui::FontConfig {
-                    name: Some("Codicons".into()),
-                    pixel_snap_h: true,
-                    oversample_h: 1,
-                    glyph_ranges: imgui::FontGlyphRanges::from_slice(&[0xEA60, 0xEC1E, 0]),
-                    ..imgui::FontConfig::default()
-                }),
-            },
-        ]);
-
-        let renderer = imgui_wgpu::Renderer::new(context, &device, &queue, renderer_config);
-        let registry = ImGuiTextureRegistry::new();
-
-        Self { renderer, registry }
-    }
-
-    pub fn render(
-        &mut self,
-        draw_data: &imgui::DrawData,
-        encoder: &mut wgpu::CommandEncoder,
-        target: &wgpu::TextureView,
-        device: &Device,
-        queue: &Queue,
-    ) {
-        let frame_view = target;
-
-        let mut pass = {
-            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("ImGui Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: frame_view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                ..Default::default()
-            })
-        };
-
-        match self.renderer.render(draw_data, queue, device, &mut pass) {
-            Ok(()) => {}
-            Err(e) => {
-                error!("Imgui Render failed: {:?}", e);
-            }
-        }
     }
 }

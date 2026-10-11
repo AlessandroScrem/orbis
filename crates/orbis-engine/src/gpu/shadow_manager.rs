@@ -181,18 +181,20 @@ impl ShadowManager {
             assets::VertexInstance::get_layout(),
         ];
 
-        let mut pipeline_desc = PipelineExt::default();
-        pipeline_desc.depth_stencil = Some(wgpu::DepthStencilState {
-            format: wgpu::TextureFormat::Depth32Float,
-            depth_write_enabled: Some(true),
-            depth_compare: Some(wgpu::CompareFunction::LessEqual),
-            bias: wgpu::DepthBiasState {
-                constant: 2,
-                slope_scale: 2.0,
-                clamp: 0.0,
-            },
-            stencil: Default::default(),
-        });
+        let pipeline_desc = PipelineExt {
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                bias: wgpu::DepthBiasState {
+                    constant: 2,
+                    slope_scale: 2.0,
+                    clamp: 0.0,
+                },
+                stencil: Default::default(),
+            }),
+            ..Default::default()
+        };
 
         let target = &[];
 

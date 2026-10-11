@@ -7,7 +7,7 @@ use crate::assets::TextureAsset;
 use crate::assets::asset_manager::AssetManager;
 use crate::assets::ibl_asset::IblAsset;
 
-use crate::engine::engine::EventBus;
+use crate::engine::core::EventBus;
 use crate::prelude::*;
 
 impl HasAssetMgr for App {

@@ -188,19 +188,19 @@ impl App {
     pub(crate) fn ibl_data(&self) -> Vec<IblData> {
         self.asset_mgr
             .iter::<crate::assets::IblAsset>()
-            .filter_map(|(id, asset)| {
+            .map(|(id, asset)| {
                 let name = asset
                     .path
                     .file_stem()
                     .and_then(|name| name.to_str())
                     .unwrap_or("IBL")
                     .to_owned();
-                Some(IblData {
+                IblData {
                     id,
                     texture: asset.hrd_id,
                     name,
                     selected: self.selected_ibl == Some(id),
-                })
+                }
             })
             .collect()
     }

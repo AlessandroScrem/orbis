@@ -8,7 +8,6 @@ use std::hash::{Hash as StdHash, Hasher};
 /// '''rust, ignore
 /// cargo bench --bench entity_hash_bench
 /// '''
-
 mod entity_hash {
     use super::*;
     // use std::hash::Hasher;

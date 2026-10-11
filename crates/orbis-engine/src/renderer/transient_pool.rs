@@ -94,12 +94,12 @@ impl<K: Eq + Hash> TransientResourceResolver<K> {
     }
 
     #[allow(unused)]
-    pub(crate) fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.slots.len()
     }
-    
+
     #[allow(unused)]
-    pub(crate) fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.slots.is_empty()
     }
 }
@@ -159,7 +159,7 @@ impl<D: Eq + Clone, R> TransientResourcePool<D, R> {
                     .get(slot)
                     .copied()
                     .flatten()
-                    .map_or(true, |last_use| last_use < request.first_use);
+                    .is_none_or(|last_use| last_use < request.first_use);
                 (lifetime_ended && entry.descriptor == request.descriptor).then_some(slot)
             });
 
@@ -257,6 +257,32 @@ mod tests {
     }
 
     #[test]
+    fn empty_requests_do_not_allocate() {
+        let mut pool = TransientResourcePool::<String, ()>::new();
+        let mut creations = 0;
+        let slots = pool.allocate_frame(&[], |_| creations += 1);
+        assert_eq!(creations, 0);
+        assert!(slots.is_empty());
+    }
+
+    #[test]
+    fn allocates_resource_for_single_request() {
+        let mut pool = TransientResourcePool::<String, String>::new();
+        let mut creations = 0;
+
+        let descriptor = "texture-a".to_string();
+        let request = [TransientRequest::new(descriptor, 0, 1)];
+        let slots = pool.allocate_frame(&request, |_| {
+            creations += 1;
+            "creation".to_string()
+        });
+        assert_eq!(creations, 1);
+        assert_eq!(slots.len(), 1);
+        assert_eq!(pool.get(slots[0]), Some(&"creation".to_string()));
+        assert_eq!(pool.len(), 1);
+    }
+
+    #[test]
     fn incompatible_descriptors_never_alias() {
         let requests = [
             TransientRequest::new("rgba8", 0, 0),
@@ -291,7 +317,6 @@ mod tests {
             ..base
         };
 
-        assert_eq!(base, base);
         assert_ne!(base, different_extent);
         assert_ne!(base, different_format);
         assert_ne!(base, different_mips);
@@ -316,6 +341,19 @@ mod tests {
         assert_eq!(first, second);
         assert_eq!(pool.get(first[0]), Some(&32));
         assert_eq!(pool.len(), 1);
+    }
+
+    #[test]
+    fn slot_does_not_reuse_if_descriptor_changes() {
+        let mut pool = TransientResourcePool::new();
+        let request1 = [TransientRequest::new(32_u32, 0, 1)];
+        let request2 = [TransientRequest::new(64_u32, 0, 1)];
+
+        let slot1 = pool.allocate_frame(&request1, |descriptor| (*descriptor).to_owned());
+        let slot2 = pool.allocate_frame(&request2, |descriptor| (*descriptor).to_owned());
+
+        assert_ne!(slot1[0], slot2[0]);
+        assert_eq!(pool.len(), 2);
     }
 
     #[test]
@@ -363,6 +401,21 @@ mod tests {
 
         assert!(pool.is_empty());
         assert_eq!(drops.get(), 1);
+    }
+
+    #[test]
+    fn recreates_resources_after_clear() {
+        let mut pool = TransientResourcePool::new();
+        pool.allocate_frame(&[TransientRequest::new(1, 0, 0)], |_| 5);
+        pool.clear();
+
+        let mut creations = 0;
+        let slots = pool.allocate_frame(&[TransientRequest::new(1, 0, 0)], |_| {
+            creations += 1;
+            10
+        });
+        assert_eq!(pool.get(slots[0]), Some(&10));
+        assert_eq!(creations, 1);
     }
 
     #[test]

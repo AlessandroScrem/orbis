@@ -16,6 +16,7 @@ pub use pick::PickCommand;
 pub use scene::SceneCommand;
 pub use selection::SelectionCommand;
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 pub enum EditorCommand {
     Scene(SceneCommand),

@@ -80,11 +80,11 @@ impl Layer for EntityListUi {
 }
 
 fn toolbar(ui: &Ui, ctx: &mut UiContext) {
-    if ui.small_button(format!("{ICON_FOLDER}##load_gltf")) {
-        if let Some(path) = crate::ui::menu_bar::file_open(crate::ui::menu_bar::FileFilter::Gltf) {
-            ctx.commands
-                .send(EditorCommand::Asset(AssetCommand::LoadGltf(path)));
-        }
+    if ui.small_button(format!("{ICON_FOLDER}##load_gltf"))
+        && let Some(path) = crate::ui::menu_bar::file_open(crate::ui::menu_bar::FileFilter::Gltf)
+    {
+        ctx.commands
+            .send(EditorCommand::Asset(AssetCommand::LoadGltf(path)));
     }
     if ui.is_item_hovered() {
         ui.tooltip_text("Load glTF / GLB");

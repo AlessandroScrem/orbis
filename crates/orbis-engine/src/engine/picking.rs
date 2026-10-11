@@ -3,7 +3,7 @@ use crate::app::domain::events::SelectionEvent::Hovered;
 use crate::ecs::entity_id::EntityRawU64;
 use crate::editor::{EditorCommand, SelectionCommand};
 use crate::engine::editor::EditorService;
-use crate::engine::engine::EventBus;
+use crate::engine::core::EventBus;
 use crate::engine::readback::{QueryResult, ReadbackManager};
 use crate::gpu::context::GpuContextRef;
 use crate::input::Input;

@@ -168,11 +168,8 @@ impl Input {
     }
 
     fn update_device_events(&mut self, winit_event: &DeviceEvent) {
-        match winit_event {
-            DeviceEvent::MouseMotion { delta } => {
-                self.mouse_delta = Vec2::new(delta.0 as f32, delta.1 as f32);
-            }
-            _ => (),
+        if let DeviceEvent::MouseMotion { delta } = winit_event {
+            self.mouse_delta = Vec2::new(delta.0 as f32, delta.1 as f32);
         }
     }
 
