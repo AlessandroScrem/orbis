@@ -1,3 +1,5 @@
+use crate::renderer::scene_renderer::ResourceAccess;
+
 use super::*;
 
 pub enum MeshPassMode {
@@ -7,6 +9,7 @@ pub enum MeshPassMode {
 
 pub struct MeshPassConfig {
     pub hdr_load: wgpu::LoadOp<wgpu::Color>,
+    pub hdr_access: ResourceAccess,
     pub entity_load: wgpu::LoadOp<wgpu::Color>,
     pub depth_load: wgpu::LoadOp<f32>,
     pub mode: MeshPassMode,
@@ -27,6 +30,7 @@ impl MeshPass {
         Self {
             config: MeshPassConfig {
                 hdr_load: wgpu::LoadOp::Clear(clear_color),
+                hdr_access: ResourceAccess::Write,
                 entity_load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                 depth_load: wgpu::LoadOp::Clear(1.0),
                 mode: MeshPassMode::Opaque,
@@ -37,6 +41,7 @@ impl MeshPass {
         Self {
             config: MeshPassConfig {
                 hdr_load: wgpu::LoadOp::Load,
+                hdr_access: ResourceAccess::ReadWrite,
                 entity_load: wgpu::LoadOp::Load,
                 depth_load: wgpu::LoadOp::Load,
                 mode: MeshPassMode::Transmission,
@@ -96,7 +101,7 @@ impl RenderPass for MeshPass {
             color_attachments: &[
                 // 0: opaque object
                 Some(wgpu::RenderPassColorAttachment {
-                    view: ctx.framebuffer_view(FramebufferKind::Hdr),
+                    view: ctx.framebuffer_attachement_view(FramebufferKind::Hdr, self.config.hdr_access),
                     ops: wgpu::Operations {
                         load: self.config.hdr_load,
                         store: wgpu::StoreOp::Store,
@@ -106,7 +111,7 @@ impl RenderPass for MeshPass {
                 }),
                 // 1: entity ID
                 Some(wgpu::RenderPassColorAttachment {
-                    view: ctx.framebuffer_view(FramebufferKind::EntityId),
+                    view: ctx.framebuffer_attachement_view(FramebufferKind::EntityId, ResourceAccess::Write),
                     ops: wgpu::Operations {
                         load: self.config.entity_load,
                         store: wgpu::StoreOp::Store,
@@ -116,7 +121,7 @@ impl RenderPass for MeshPass {
                 }),
             ],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: ctx.framebuffer_view(FramebufferKind::Depth),
+                view: ctx.framebuffer_attachement_view(FramebufferKind::Depth, ResourceAccess::Write),
                 depth_ops: Some(wgpu::Operations {
                     load: self.config.depth_load,
                     store: wgpu::StoreOp::Store,

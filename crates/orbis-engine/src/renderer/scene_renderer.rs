@@ -14,10 +14,30 @@ pub struct SceneRenderContext<'a> {
     pub gpu_cache: &'a GpuCache,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ResourceAccess {
+    Read,
+    Write,
+    ReadWrite,
+}
+
+use std::fmt;
+impl fmt::Display for ResourceAccess {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match *self {
+            Self::Read => "Read",
+            Self::Write => "Write",
+            Self::ReadWrite => "ReadWrite",
+        };
+        write!(f, "{}", name)
+    }
+}
+
 pub struct RenderContext<'a> {
     pub device: &'a Device,
     pub gpu_cache: &'a GpuCache,
 
+    // pub get_bindgroup: &'a dyn Fn(BindgroupKind) -> &'a wgpu::BindGroup,
     pub gpu_mgr: &'a GpuManager,
     pub shadow_mgr: &'a ShadowManager,
     pub pip_mgr: &'a PipelineManager,
@@ -34,11 +54,22 @@ impl RenderContext<'_> {
         self.active_pass_writes.extend_from_slice(writes);
     }
 
-    fn assert_framebuffer_access(&self, kind: FramebufferKind) {
+    fn assert_framebuffer_access(&self, kind: FramebufferKind, access: ResourceAccess) {
         let resource = Self::resource_for_framebuffer(kind);
         assert!(
             Self::resource_is_declared(resource, &self.active_pass_reads, &self.active_pass_writes,),
             "render pass accessed undeclared framebuffer resource {resource}"
+        );
+        // println!("Active pass reads: {:?}", self.active_pass_reads);
+        // println!("Active pass writes: {:?}", self.active_pass_writes);
+        assert!(
+            Self::resource_access_is_declared(
+                resource,
+                access,
+                &self.active_pass_reads,
+                &self.active_pass_writes,
+            ),
+            "render pass accessed framebuffer resource {resource} with invalid access {access}"
         );
     }
 
@@ -50,6 +81,19 @@ impl RenderContext<'_> {
         reads.contains(&resource) || writes.contains(&resource)
     }
 
+    fn resource_access_is_declared(
+        resource: ResourceId,
+        access: ResourceAccess,
+        reads: &[ResourceId],
+        writes: &[ResourceId],
+    ) -> bool {
+        match access {
+            ResourceAccess::Read => reads.contains(&resource),
+            ResourceAccess::Write => writes.contains(&resource),
+            ResourceAccess::ReadWrite => reads.contains(&resource) && writes.contains(&resource),
+        }
+    }
+
     fn resource_for_framebuffer(kind: FramebufferKind) -> ResourceId {
         match kind {
             FramebufferKind::Hdr => ResourceId::HDR,
@@ -59,23 +103,23 @@ impl RenderContext<'_> {
         }
     }
 
-    pub(crate) fn framebuffer_view(&self, kind: FramebufferKind) -> &wgpu::TextureView {
-        self.assert_framebuffer_access(kind);
+    pub(crate) fn framebuffer_attachement_view(&self, kind: FramebufferKind, access: ResourceAccess) -> &wgpu::TextureView {
+        self.assert_framebuffer_access(kind, access);
         self.gpu_mgr.get_framebuffer_view(kind)
     }
 
     pub(crate) fn framebuffer_texture(&self, kind: FramebufferKind) -> &wgpu::Texture {
-        self.assert_framebuffer_access(kind);
+        self.assert_framebuffer_access(kind, ResourceAccess::Read);
         self.gpu_mgr.get_framebuffer_texture(kind)
     }
 
     pub(crate) fn framebuffer_sampler(&self, kind: FramebufferKind) -> &wgpu::Sampler {
-        self.assert_framebuffer_access(kind);
+        self.assert_framebuffer_access(kind, ResourceAccess::Read);
         self.gpu_mgr.get_framebuffer_sampler(kind)
     }
 
     pub(crate) fn framebuffer_bind_group(&self, kind: FramebufferKind) -> &wgpu::BindGroup {
-        self.assert_framebuffer_access(kind);
+        self.assert_framebuffer_access(kind, ResourceAccess::Read);
         self.gpu_mgr.get_framebuffer_bg(kind)
     }
 }
@@ -351,6 +395,18 @@ mod render_context_tests {
             ResourceId::HDR,
             ResourceAccess::Write,
             &reads,
+            &writes,
+        ));
+        assert!(!RenderContext::resource_access_is_declared(
+            ResourceId::HDR,
+            ResourceAccess::ReadWrite,
+            &reads,
+            &[],
+        ));
+        assert!(!RenderContext::resource_access_is_declared(
+            ResourceId::HDR,
+            ResourceAccess::ReadWrite,
+            &[],
             &writes,
         ));
     }
