@@ -43,7 +43,7 @@ impl RenderPass for SkyboxPass {
                 depth_slice: None,
             })],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: ctx.framebuffer_attachement_view(FramebufferKind::Depth, ResourceAccess::Write),
+                view: ctx.framebuffer_attachement_view(FramebufferKind::Depth, ResourceAccess::ReadWrite),
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Load,
                     store: wgpu::StoreOp::Store,

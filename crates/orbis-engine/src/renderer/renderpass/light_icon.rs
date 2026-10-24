@@ -44,7 +44,7 @@ impl RenderPass for LightsIconPass {
                     }),
                     // 1: entity ID
                     Some(wgpu::RenderPassColorAttachment {
-                        view: ctx.framebuffer_attachement_view(FramebufferKind::EntityId, ResourceAccess::Write),
+                        view: ctx.framebuffer_attachement_view(FramebufferKind::EntityId, ResourceAccess::ReadWrite),
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Load,
                             store: wgpu::StoreOp::Store,
@@ -54,7 +54,7 @@ impl RenderPass for LightsIconPass {
                     }),
                 ],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: ctx.framebuffer_attachement_view(FramebufferKind::Depth, ResourceAccess::Write),
+                    view: ctx.framebuffer_attachement_view(FramebufferKind::Depth, ResourceAccess::ReadWrite),
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
