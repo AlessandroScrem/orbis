@@ -11,6 +11,8 @@ pub enum MeshPassMode {
 pub struct MeshPassConfig {
     pub hdr_load: wgpu::LoadOp<wgpu::Color>,
     pub hdr_access: ResourceAccess,
+    pub entity_access: ResourceAccess,
+    pub depth_access: ResourceAccess,
     pub entity_load: wgpu::LoadOp<wgpu::Color>,
     pub depth_load: wgpu::LoadOp<f32>,
     pub mode: MeshPassMode,
@@ -30,22 +32,26 @@ impl MeshPass {
         };
         Self {
             config: MeshPassConfig {
+                mode: MeshPassMode::Opaque,
                 hdr_load: wgpu::LoadOp::Clear(clear_color),
-                hdr_access: ResourceAccess::Write,
                 entity_load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                 depth_load: wgpu::LoadOp::Clear(1.0),
-                mode: MeshPassMode::Opaque,
+                hdr_access: ResourceAccess::Write,
+                entity_access: ResourceAccess::Write,
+                depth_access: ResourceAccess::Write,
             },
         }
     }
     pub fn transmission() -> Self {
         Self {
             config: MeshPassConfig {
+                mode: MeshPassMode::Transmission,
                 hdr_load: wgpu::LoadOp::Load,
-                hdr_access: ResourceAccess::ReadWrite,
                 entity_load: wgpu::LoadOp::Load,
                 depth_load: wgpu::LoadOp::Load,
-                mode: MeshPassMode::Transmission,
+                hdr_access: ResourceAccess::ReadWrite,
+                entity_access: ResourceAccess::ReadWrite,
+                depth_access: ResourceAccess::ReadWrite,
             },
         }
     }
@@ -73,11 +79,7 @@ impl RenderPass for MeshPass {
     }
     fn writes(&self) -> &[ResourceId] {
         match self.config.mode {
-            MeshPassMode::Opaque => &[
-                ResourceId::HDR,
-                ResourceId::ENTITY,
-                ResourceId::DEPTH,
-            ],
+            MeshPassMode::Opaque => &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH],
             MeshPassMode::Transmission => &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH],
         }
     }
@@ -113,7 +115,7 @@ impl RenderPass for MeshPass {
                 Some(wgpu::RenderPassColorAttachment {
                     view: ctx.framebuffer_attachement_view(
                         FramebufferKind::EntityId,
-                        ResourceAccess::Write,
+                        self.config.entity_access,
                     ),
                     ops: wgpu::Operations {
                         load: self.config.entity_load,
@@ -125,7 +127,7 @@ impl RenderPass for MeshPass {
             ],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: ctx
-                    .framebuffer_attachement_view(FramebufferKind::Depth, ResourceAccess::Write),
+                    .framebuffer_attachement_view(FramebufferKind::Depth, self.config.depth_access),
                 depth_ops: Some(wgpu::Operations {
                     load: self.config.depth_load,
                     store: wgpu::StoreOp::Store,
