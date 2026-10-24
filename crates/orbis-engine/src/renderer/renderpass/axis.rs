@@ -54,3 +54,20 @@ impl RenderPass for AxisPass {
         renderpass.draw(0..6, 0..1);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    //Test single passes.
+    #[test]
+    fn axis_passes_declare_expected_resource_access() {
+        let pass = RenderPassEnum::Axis(AxisPass{});
+        
+        assert_eq!(pass.reads(), &[ResourceId::HDR]);
+        assert_eq!(
+            pass.writes(),
+            &[ResourceId::HDR]
+        );
+    }
+}

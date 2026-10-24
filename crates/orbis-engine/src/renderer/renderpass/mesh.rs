@@ -198,3 +198,36 @@ impl RenderPass for MeshPass {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    //Test single passes.
+    #[test]
+    fn mesh_passes_declare_expected_resource_access() {
+        let opaque_pass = RenderPassEnum::Mesh(MeshPass::opaque());
+        
+        assert_eq!(opaque_pass.reads(), &[ResourceId::SHADOWMAP]);
+        assert_eq!(
+            opaque_pass.writes(),
+            &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH]
+        );
+
+        let transmission_pass = RenderPassEnum::Mesh(MeshPass::transmission());
+        assert_eq!(
+            transmission_pass.reads(),
+            &[
+                ResourceId::HDR,
+                ResourceId::OPAQUE,
+                ResourceId::ENTITY,
+                ResourceId::DEPTH,
+                ResourceId::SHADOWMAP
+            ]
+        );
+        assert_eq!(
+            transmission_pass.writes(),
+            &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH]
+        );
+    }
+}

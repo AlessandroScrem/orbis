@@ -82,9 +82,15 @@ impl RenderPass for LightsIconPass {
 mod tests {
     use super::*;
 
+    //Test single passes.
     #[test]
-    fn declares_entity_id_attachment_as_written() {
-        let pass = LightsIconPass {};
-        assert!(pass.writes().contains(&ResourceId::ENTITY));
+    fn lights_icon_passes_declare_expected_resource_access() {
+        let pass = RenderPassEnum::LightsIcon(LightsIconPass{});
+        
+        assert_eq!(pass.reads(), &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH]);
+        assert_eq!(
+            pass.writes(),
+            &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH]
+        );
     }
 }

@@ -58,22 +58,27 @@ impl RenderContext<'_> {
 
     fn assert_framebuffer_access(&self, kind: FramebufferKind, access: ResourceAccess) {
         let resource = Self::resource_for_framebuffer(kind);
-        self.assert_resource_access(resource, access);
+        Self::assert_resource_access(
+            resource,
+            access,
+            &self.active_pass_reads,
+            &self.active_pass_writes,
+        );
     }
 
-    fn assert_resource_access(&self, resource: ResourceId, access: ResourceAccess) {
+    fn assert_resource_access(
+        resource: ResourceId,
+        access: ResourceAccess,
+        reads: &[ResourceId],
+        writes: &[ResourceId],
+    ) {
         assert!(
-            Self::resource_is_declared(resource, &self.active_pass_reads, &self.active_pass_writes,),
+            Self::resource_is_declared(resource, reads, writes),
             "render pass accessed undeclared resource {resource}"
         );
 
         assert!(
-            Self::resource_access_is_declared(
-                resource,
-                access,
-                &self.active_pass_reads,
-                &self.active_pass_writes,
-            ),
+            Self::resource_access_is_declared(resource, access, reads, writes,),
             "render pass accessed resource {resource} with invalid access {access}"
         );
     }
@@ -133,16 +138,31 @@ impl RenderContext<'_> {
     }
 
     pub(crate) fn assert_shadowmap_write_access(&self) {
-        self.assert_resource_access(ResourceId::SHADOWMAP, ResourceAccess::Write);
+        Self::assert_resource_access(
+            ResourceId::SHADOWMAP,
+            ResourceAccess::Write,
+            &self.active_pass_reads,
+            &self.active_pass_writes,
+        );
     }
 
     pub(crate) fn pbr_map_bind_group(&self, config_mode: MeshPassMode) -> &wgpu::BindGroup {
         // The transmission pass samples the opaque scene color;
         // the opaque pass only needs the shadow map.
         if config_mode == MeshPassMode::Transmission {
-            self.assert_resource_access(ResourceId::OPAQUE, ResourceAccess::Read);
+            Self::assert_resource_access(
+                ResourceId::OPAQUE,
+                ResourceAccess::Read,
+                &self.active_pass_reads,
+                &self.active_pass_writes,
+            );
         }
-        self.assert_resource_access(ResourceId::SHADOWMAP, ResourceAccess::Read);
+        Self::assert_resource_access(
+            ResourceId::SHADOWMAP,
+            ResourceAccess::Read,
+            &self.active_pass_reads,
+            &self.active_pass_writes,
+        );
 
         self.gpu_mgr.get_bindgroup(BindgroupKind::PbrMap)
     }
@@ -368,6 +388,19 @@ mod render_context_tests {
             RenderContext::resource_for_framebuffer(FramebufferKind::Depth),
             ResourceId::DEPTH
         );
+    }
+
+    #[test]
+    fn undeclared_resource_access_panics() {
+        let result = std::panic::catch_unwind(|| {
+            RenderContext::assert_resource_access(
+                ResourceId::DEPTH,
+                ResourceAccess::Read,
+                &[ResourceId::HDR],
+                &[ResourceId::ENTITY],
+            );
+        });
+        assert!(result.is_err());
     }
 
     #[test]

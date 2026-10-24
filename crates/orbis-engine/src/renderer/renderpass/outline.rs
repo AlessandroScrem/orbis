@@ -54,3 +54,20 @@ impl RenderPass for OutlinePass {
         renderpass.draw(0..3, 0..1);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    //Test single passes.
+    #[test]
+    fn outline_passes_declare_expected_resource_access() {
+        let pass = RenderPassEnum::Outline(OutlinePass{});
+        
+        assert_eq!(pass.reads(), &[ResourceId::ENTITY, ResourceId::LDR]);
+        assert_eq!(
+            pass.writes(),
+            &[ResourceId::LDR]
+        );
+    }
+}

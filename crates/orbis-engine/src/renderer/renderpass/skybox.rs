@@ -62,3 +62,20 @@ impl RenderPass for SkyboxPass {
         renderpass.draw(0..36, 0..1);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    //Test single passes.
+    #[test]
+    fn skybox_passes_declare_expected_resource_access() {
+        let pass = RenderPassEnum::Skybox(SkyboxPass{});
+        
+        assert_eq!(pass.reads(), &[ResourceId::HDR, ResourceId::DEPTH]);
+        assert_eq!(
+            pass.writes(),
+            &[ResourceId::HDR, ResourceId::DEPTH]
+        );
+    }
+}

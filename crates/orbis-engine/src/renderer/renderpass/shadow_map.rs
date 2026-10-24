@@ -178,3 +178,21 @@ fn convert_texture(
 
     renderpass.draw(0..3, 0..1);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    //Test single passes.
+    #[test]
+    fn shadow_map_passes_declare_expected_resource_access() {
+        let pass = RenderPassEnum::Shadow(ShadowPass{});
+        
+        assert_eq!(pass.reads(), &[]);
+        assert_eq!(
+            pass.writes(),
+            &[ResourceId::SHADOWMAP]
+        );
+    }
+}
+

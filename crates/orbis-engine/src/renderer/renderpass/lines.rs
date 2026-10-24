@@ -56,3 +56,21 @@ impl RenderPass for LinesPass {
         renderpass.draw(0..vertex_count, 0..1);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    //Test single passes.
+    #[test]
+    fn lines_passes_declare_expected_resource_access() {
+        let pass = RenderPassEnum::Lines(LinesPass{});
+        
+        assert_eq!(pass.reads(), &[ResourceId::HDR]);
+        assert_eq!(
+            pass.writes(),
+            &[ResourceId::HDR]
+        );
+    }
+}
+

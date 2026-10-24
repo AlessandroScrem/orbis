@@ -273,3 +273,20 @@ fn render_mipmaps(
         src_view = dst_view;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    //Test single passes.
+    #[test]
+    fn build_mipmaps_passes_declare_expected_resource_access() {
+        let pass = RenderPassEnum::BuildMipmaps(BuildMipmapsPass{});
+        
+        assert_eq!(pass.reads(), &[ResourceId::HDR]);
+        assert_eq!(
+            pass.writes(),
+            &[ResourceId::OPAQUE]
+        );
+    }
+}
