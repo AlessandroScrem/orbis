@@ -27,7 +27,6 @@ impl RenderPass for LightsIconPass {
                 return;
             }
 
-            let gpu_manager = ctx.gpu_mgr;
             let pipeline_manager = ctx.pip_mgr;
 
             // Render pass
@@ -68,8 +67,8 @@ impl RenderPass for LightsIconPass {
             });
 
             let pipeline = pipeline_manager.get_render_pipeline(PipelineKind::LightIcon);
-            let perframe_bg = gpu_manager.get_bindgroup(BindgroupKind::Perframe);
-            let light_bg = gpu_manager.get_bindgroup(BindgroupKind::LightIcon);
+            let perframe_bg = ctx.bindgroup(BindgroupKind::Perframe);
+            let light_bg = ctx.bindgroup(BindgroupKind::LightIcon);
 
             renderpass.set_pipeline(pipeline);
             renderpass.set_bind_group(0, perframe_bg, &[]);

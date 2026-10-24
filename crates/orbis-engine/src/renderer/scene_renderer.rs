@@ -1,5 +1,8 @@
 use crate::gpu::pipeline_manager::PipelineManager;
-use crate::gpu::{FramebufferKind, GpuCache, GpuContext, GpuManager, ShadowManager};
+use crate::gpu::{
+    BindgroupKind, BindgroupLayoutKind, BufferKind, FramebufferKind, GpuCache, GpuContext,
+    GpuManager, ShadowManager,
+};
 use crate::prelude::{debug, info};
 use crate::renderer::framebuilder::{DrawStats, FrameData};
 use crate::renderer::rendergraph::{RenderGraph, ResourceId};
@@ -36,12 +39,11 @@ impl fmt::Display for ResourceAccess {
 pub struct RenderContext<'a> {
     pub device: &'a Device,
     pub gpu_cache: &'a GpuCache,
-
-    // pub get_bindgroup: &'a dyn Fn(BindgroupKind) -> &'a wgpu::BindGroup,
-    pub gpu_mgr: &'a GpuManager,
     pub shadow_mgr: &'a ShadowManager,
     pub pip_mgr: &'a PipelineManager,
     pub target: &'a wgpu::TextureView,
+
+    gpu_mgr: &'a GpuManager,
     active_pass_reads: Vec<ResourceId>,
     active_pass_writes: Vec<ResourceId>,
 }
@@ -56,12 +58,15 @@ impl RenderContext<'_> {
 
     fn assert_framebuffer_access(&self, kind: FramebufferKind, access: ResourceAccess) {
         let resource = Self::resource_for_framebuffer(kind);
+        self.assert_resource_access(resource, access);
+    }
+
+    fn assert_resource_access(&self, resource: ResourceId, access: ResourceAccess) {
         assert!(
             Self::resource_is_declared(resource, &self.active_pass_reads, &self.active_pass_writes,),
-            "render pass accessed undeclared framebuffer resource {resource}"
+            "render pass accessed undeclared resource {resource}"
         );
-        // println!("Active pass reads: {:?}", self.active_pass_reads);
-        // println!("Active pass writes: {:?}", self.active_pass_writes);
+
         assert!(
             Self::resource_access_is_declared(
                 resource,
@@ -69,7 +74,7 @@ impl RenderContext<'_> {
                 &self.active_pass_reads,
                 &self.active_pass_writes,
             ),
-            "render pass accessed framebuffer resource {resource} with invalid access {access}"
+            "render pass accessed resource {resource} with invalid access {access}"
         );
     }
 
@@ -103,7 +108,11 @@ impl RenderContext<'_> {
         }
     }
 
-    pub(crate) fn framebuffer_attachement_view(&self, kind: FramebufferKind, access: ResourceAccess) -> &wgpu::TextureView {
+    pub(crate) fn framebuffer_attachement_view(
+        &self,
+        kind: FramebufferKind,
+        access: ResourceAccess,
+    ) -> &wgpu::TextureView {
         self.assert_framebuffer_access(kind, access);
         self.gpu_mgr.get_framebuffer_view(kind)
     }
@@ -121,6 +130,42 @@ impl RenderContext<'_> {
     pub(crate) fn framebuffer_bind_group(&self, kind: FramebufferKind) -> &wgpu::BindGroup {
         self.assert_framebuffer_access(kind, ResourceAccess::Read);
         self.gpu_mgr.get_framebuffer_bg(kind)
+    }
+
+    pub(crate) fn assert_shadowmap_write_access(&self) {
+        self.assert_resource_access(ResourceId::SHADOWMAP, ResourceAccess::Write);
+    }
+
+    pub(crate) fn pbr_map_bind_group(&self, config_mode: MeshPassMode) -> &wgpu::BindGroup {
+        // The transmission pass samples the opaque scene color;
+        // the opaque pass only needs the shadow map.
+        if config_mode == MeshPassMode::Transmission {
+            self.assert_resource_access(ResourceId::OPAQUE, ResourceAccess::Read);
+        }
+        self.assert_resource_access(ResourceId::SHADOWMAP, ResourceAccess::Read);
+
+        self.gpu_mgr.get_bindgroup(BindgroupKind::PbrMap)
+    }
+
+    pub(crate) fn buffer(&self, kind: BufferKind) -> &wgpu::Buffer {
+        self.gpu_mgr.get_buffer(kind)
+    }
+
+    pub(crate) fn bindgroup_layout(&self, kind: BindgroupLayoutKind) -> &wgpu::BindGroupLayout {
+        self.gpu_mgr.get_bindgroup_layout(kind)
+    }
+
+    pub(crate) fn bindgroup(&self, kind: BindgroupKind) -> &wgpu::BindGroup {
+        assert!(
+            !matches!(kind, BindgroupKind::PbrMap),
+            "PbrMap bind group must use a resource-aware accessor"
+        );
+
+        self.gpu_mgr.get_bindgroup(kind)
+    }
+
+    pub(crate) fn ibl_skybox_bind_group(&self, skybox_blur: bool) -> &wgpu::BindGroup {
+        self.gpu_mgr.get_ibl_skybox_bg(skybox_blur)
     }
 }
 
@@ -407,6 +452,12 @@ mod render_context_tests {
             ResourceId::HDR,
             ResourceAccess::ReadWrite,
             &[],
+            &writes,
+        ));
+        assert!(RenderContext::resource_access_is_declared(
+            ResourceId::HDR,
+            ResourceAccess::ReadWrite,
+            &reads,
             &writes,
         ));
     }

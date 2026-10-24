@@ -27,7 +27,6 @@ impl RenderPass for LinesPass {
 
         let vertex_count = frame.lines.len() as u32;
 
-        let gpu_manager = ctx.gpu_mgr;
         let pipeline_manager = ctx.pip_mgr;
 
         // Render pass
@@ -51,9 +50,9 @@ impl RenderPass for LinesPass {
         let pipeline = pipeline_manager.get_render_pipeline(PipelineKind::Lines);
 
         renderpass.set_pipeline(pipeline);
-        renderpass.set_bind_group(0, gpu_manager.get_bindgroup(BindgroupKind::Camera), &[]);
+        renderpass.set_bind_group(0, ctx.bindgroup(BindgroupKind::Camera), &[]);
 
-        renderpass.set_vertex_buffer(0, gpu_manager.get_buffer(BufferKind::Lines).slice(0..));
+        renderpass.set_vertex_buffer(0, ctx.buffer(BufferKind::Lines).slice(0..));
         renderpass.draw(0..vertex_count, 0..1);
     }
 }

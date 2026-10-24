@@ -2,6 +2,7 @@ use crate::renderer::scene_renderer::ResourceAccess;
 
 use super::*;
 
+#[derive(PartialEq, Clone, Copy)]
 pub enum MeshPassMode {
     Opaque,
     Transmission,
@@ -74,7 +75,6 @@ impl RenderPass for MeshPass {
         match self.config.mode {
             MeshPassMode::Opaque => &[
                 ResourceId::HDR,
-                ResourceId::OPAQUE,
                 ResourceId::ENTITY,
                 ResourceId::DEPTH,
             ],
@@ -93,7 +93,6 @@ impl RenderPass for MeshPass {
             MeshPassMode::Transmission => &frame.transmission_batches,
         };
 
-        let gpu_manager = ctx.gpu_mgr;
         let pipeline_manager = ctx.pip_mgr;
 
         let mut renderpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -101,7 +100,8 @@ impl RenderPass for MeshPass {
             color_attachments: &[
                 // 0: opaque object
                 Some(wgpu::RenderPassColorAttachment {
-                    view: ctx.framebuffer_attachement_view(FramebufferKind::Hdr, self.config.hdr_access),
+                    view: ctx
+                        .framebuffer_attachement_view(FramebufferKind::Hdr, self.config.hdr_access),
                     ops: wgpu::Operations {
                         load: self.config.hdr_load,
                         store: wgpu::StoreOp::Store,
@@ -111,7 +111,10 @@ impl RenderPass for MeshPass {
                 }),
                 // 1: entity ID
                 Some(wgpu::RenderPassColorAttachment {
-                    view: ctx.framebuffer_attachement_view(FramebufferKind::EntityId, ResourceAccess::Write),
+                    view: ctx.framebuffer_attachement_view(
+                        FramebufferKind::EntityId,
+                        ResourceAccess::Write,
+                    ),
                     ops: wgpu::Operations {
                         load: self.config.entity_load,
                         store: wgpu::StoreOp::Store,
@@ -121,7 +124,8 @@ impl RenderPass for MeshPass {
                 }),
             ],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: ctx.framebuffer_attachement_view(FramebufferKind::Depth, ResourceAccess::Write),
+                view: ctx
+                    .framebuffer_attachement_view(FramebufferKind::Depth, ResourceAccess::Write),
                 depth_ops: Some(wgpu::Operations {
                     load: self.config.depth_load,
                     store: wgpu::StoreOp::Store,
@@ -134,13 +138,13 @@ impl RenderPass for MeshPass {
         let render_pipeline = pipeline_manager.get_render_pipeline(PipelineKind::Pbr);
 
         renderpass.set_pipeline(render_pipeline);
-        renderpass.set_bind_group(0, gpu_manager.get_bindgroup(BindgroupKind::Perframe), &[]);
-        renderpass.set_bind_group(3, gpu_manager.get_bindgroup(BindgroupKind::PbrMap), &[]);
+        renderpass.set_bind_group(0, ctx.bindgroup(BindgroupKind::Perframe), &[]);
+        renderpass.set_bind_group(3, ctx.pbr_map_bind_group(self.config.mode), &[]);
 
         // -------------------------------------------------
         // INSTANCE BUFFER
         // -------------------------------------------------
-        renderpass.set_vertex_buffer(1, gpu_manager.get_buffer(BufferKind::Instances).slice(..));
+        renderpass.set_vertex_buffer(1, ctx.buffer(BufferKind::Instances).slice(..));
 
         // -------------------------------------------------
         // SORT BY MATERIAL
