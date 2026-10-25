@@ -15,4 +15,3 @@ pub(crate) use material_preview::MaterialPreviewRenderer;
 pub(crate) use scene_renderer::SceneRenderer;
 
 use renderpass::*;
-
