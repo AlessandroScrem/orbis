@@ -29,15 +29,6 @@ impl RenderPass for ShadowPass {
             return;
         };
 
-        if lights
-            .lights
-            .iter()
-            .take(lights.count as usize)
-            .any(|light| light.cast_shadow.is_one())
-        {
-            ctx.assert_shadowmap_write_access();
-        }
-
         for (slot, light) in lights
             .lights
             .iter()
