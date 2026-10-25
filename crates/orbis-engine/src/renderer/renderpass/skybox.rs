@@ -1,5 +1,3 @@
-use crate::renderer::scene_renderer::ResourceAccess;
-
 use super::*;
 
 pub struct SkyboxPass {}
@@ -34,7 +32,7 @@ impl RenderPass for SkyboxPass {
             label: Some("Skybox Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: ctx
-                    .framebuffer_attachement_view(FramebufferKind::Hdr, ResourceAccess::ReadWrite),
+                    .framebuffer_attachement_view(FramebufferKind::Hdr),
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,
                     store: wgpu::StoreOp::Store,
@@ -43,7 +41,7 @@ impl RenderPass for SkyboxPass {
                 depth_slice: None,
             })],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: ctx.framebuffer_attachement_view(FramebufferKind::Depth, ResourceAccess::ReadWrite),
+                view: ctx.framebuffer_attachement_view(FramebufferKind::Depth),
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Load,
                     store: wgpu::StoreOp::Store,
