@@ -259,7 +259,7 @@ impl RenderGraph {
     // Compile (topo sort + cycle detection)
     // Topological sort (DFS)
     // -------------------------
-    pub fn compile(&self) -> Result<Vec<usize>, String> {
+    fn compile(&self) -> Result<Vec<usize>, String> {
         let (_passes, resources) = self.build_graph();
 
         if let Some(resource_name) = resources
