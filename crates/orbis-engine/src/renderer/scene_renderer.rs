@@ -5,7 +5,7 @@ use crate::gpu::{
 };
 use crate::prelude::{debug, info};
 use crate::renderer::framebuilder::{DrawStats, FrameData};
-use crate::renderer::rendergraph::{RenderGraph, ResourceId};
+use crate::renderer::rendergraph::{CompiledRenderGraph, RenderGraph, ResourceId};
 use crate::renderer::renderpass::*;
 use wgpu::Device;
 
@@ -215,6 +215,7 @@ pub struct FrameStats {
 }
 
 pub struct SceneRenderer {
+    compiled_graph: CompiledRenderGraph,
     render_graph: RenderGraph,
     stats: FrameStats,
 }
@@ -238,8 +239,14 @@ impl SceneRenderer {
         render_graph.add_pass(RenderPassEnum::Linearize(LinearizePass {}));
         render_graph.add_pass(RenderPassEnum::Outline(OutlinePass {}));
 
+        let compiled_graph = { 
+            let (order, lifetimes) = render_graph.compile_lifetimes().unwrap_or_default();
+            CompiledRenderGraph::new(order, lifetimes)
+        };
+
         Self {
             render_graph,
+            compiled_graph,
             stats: FrameStats::default(),
         }
     }

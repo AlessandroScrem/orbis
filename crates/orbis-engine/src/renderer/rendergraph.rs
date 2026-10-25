@@ -100,6 +100,18 @@ pub(crate) struct RenderGraph {
     passes: Vec<Box<dyn RenderPass>>,
 }
 
+#[derive(Debug, Default)]
+pub struct CompiledRenderGraph {
+    order: Vec<usize>,
+    lifetimes: Vec<ResourceLifetime>,
+}
+
+impl CompiledRenderGraph {
+    pub fn new(order: Vec<usize>, lifetimes: Vec<ResourceLifetime>) -> Self {
+        Self { order, lifetimes }
+    }
+}
+
 /// Inclusive pass-order lifetime of a logical render-graph resource.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ResourceLifetime {
@@ -329,6 +341,11 @@ impl RenderGraph {
         Ok(result)
     }
 
+    fn compile_persistent(&self) -> Result<CompiledRenderGraph, String> {
+        let (order, lifetimes) = self.compile_lifetimes()?;
+        Ok(CompiledRenderGraph { order, lifetimes })
+    }
+
     /// Compiles the graph and derives resource lifetimes in execution-order indices.
     ///
     /// The framebuffer cache consumes these lifetimes to resolve logical targets
@@ -441,6 +458,32 @@ impl RenderGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compile_returns_persistent_graph() {
+        let graph = RenderGraph::new();
+
+        let compiled = graph.compile_persistent().unwrap();
+
+        assert!(compiled.order.is_empty());
+        assert!(compiled.lifetimes.is_empty());
+    }
+
+    #[test]
+    fn compile_persistent_preserves_order_and_lifetimes() {
+        let mut graph = RenderGraph::new();
+
+        graph.add_pass(ShadowPass{});
+        graph.add_pass(MeshPass::opaque());
+
+        let compiled = graph.compile_persistent().unwrap();
+
+        assert_eq!(compiled.order, vec![0, 1]);
+
+        // Verifica che la risorsa condivisa abbia:
+        // first_use = 0
+        // last_use = 1
+    }
 
     #[test]
     fn should_run_in_order() {
