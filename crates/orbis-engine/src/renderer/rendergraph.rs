@@ -1023,3 +1023,7 @@ mod tests {
         assert_eq!((ldr.first_use, ldr.last_use), (1, 1));
     }
 }
+
+#[cfg(test)]
+#[path = "rendergraph_tests.rs"]
+mod tests_for_default_pass_contracts;
