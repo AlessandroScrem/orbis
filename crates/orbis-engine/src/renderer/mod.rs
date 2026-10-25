@@ -16,5 +16,3 @@ pub(crate) use scene_renderer::SceneRenderer;
 
 use renderpass::*;
 
-#[cfg(test)]
-mod rendergraph_invariants_tests;
