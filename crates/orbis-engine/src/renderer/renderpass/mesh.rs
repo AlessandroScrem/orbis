@@ -1,5 +1,3 @@
-use crate::renderer::scene_renderer::ResourceAccess;
-
 use super::*;
 
 #[derive(PartialEq, Clone, Copy)]
@@ -10,9 +8,6 @@ pub enum MeshPassMode {
 
 pub struct MeshPassConfig {
     pub hdr_load: wgpu::LoadOp<wgpu::Color>,
-    pub hdr_access: ResourceAccess,
-    pub entity_access: ResourceAccess,
-    pub depth_access: ResourceAccess,
     pub entity_load: wgpu::LoadOp<wgpu::Color>,
     pub depth_load: wgpu::LoadOp<f32>,
     pub mode: MeshPassMode,
@@ -39,9 +34,6 @@ impl MeshPass {
                 hdr_load: wgpu::LoadOp::Clear(Self::HDR_CLEAR),
                 entity_load: wgpu::LoadOp::Clear(Self::ENTITY_CLEAR),
                 depth_load: wgpu::LoadOp::Clear(Self::DEPTH_CLEAR),
-                hdr_access: ResourceAccess::Write,
-                entity_access: ResourceAccess::Write,
-                depth_access: ResourceAccess::Write,
             },
         }
     }
@@ -52,9 +44,6 @@ impl MeshPass {
                 hdr_load: wgpu::LoadOp::Load,
                 entity_load: wgpu::LoadOp::Load,
                 depth_load: wgpu::LoadOp::Load,
-                hdr_access: ResourceAccess::ReadWrite,
-                entity_access: ResourceAccess::ReadWrite,
-                depth_access: ResourceAccess::ReadWrite,
             },
         }
     }
@@ -106,7 +95,7 @@ impl RenderPass for MeshPass {
                 // 0: opaque object
                 Some(wgpu::RenderPassColorAttachment {
                     view: ctx
-                        .framebuffer_attachement_view(FramebufferKind::Hdr, self.config.hdr_access),
+                        .framebuffer_attachement_view(FramebufferKind::Hdr),
                     ops: wgpu::Operations {
                         load: self.config.hdr_load,
                         store: wgpu::StoreOp::Store,
@@ -116,10 +105,7 @@ impl RenderPass for MeshPass {
                 }),
                 // 1: entity ID
                 Some(wgpu::RenderPassColorAttachment {
-                    view: ctx.framebuffer_attachement_view(
-                        FramebufferKind::EntityId,
-                        self.config.entity_access,
-                    ),
+                    view: ctx.framebuffer_attachement_view(FramebufferKind::EntityId),
                     ops: wgpu::Operations {
                         load: self.config.entity_load,
                         store: wgpu::StoreOp::Store,
@@ -130,7 +116,7 @@ impl RenderPass for MeshPass {
             ],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: ctx
-                    .framebuffer_attachement_view(FramebufferKind::Depth, self.config.depth_access),
+                    .framebuffer_attachement_view(FramebufferKind::Depth),
                 depth_ops: Some(wgpu::Operations {
                     load: self.config.depth_load,
                     store: wgpu::StoreOp::Store,
@@ -144,7 +130,7 @@ impl RenderPass for MeshPass {
 
         renderpass.set_pipeline(render_pipeline);
         renderpass.set_bind_group(0, ctx.bindgroup(BindgroupKind::Perframe), &[]);
-        renderpass.set_bind_group(3, ctx.pbr_map_bind_group(self.config.mode), &[]);
+        renderpass.set_bind_group(3, ctx.pbr_map_bind_group(), &[]);
 
         // -------------------------------------------------
         // INSTANCE BUFFER
@@ -235,13 +221,9 @@ mod tests {
     }
 
     #[test]
-    fn opaque_pass_clears_attachments_and_uses_write_access() {
+    fn opaque_pass_clears_attachments() {
         let pass = MeshPass::opaque();
         let config = &pass.config;
-
-        assert_eq!(config.hdr_access, ResourceAccess::Write);
-        assert_eq!(config.entity_access, ResourceAccess::Write);
-        assert_eq!(config.depth_access, ResourceAccess::Write);
 
         assert!(matches!(
             &config.hdr_load,
@@ -258,13 +240,9 @@ mod tests {
     }
 
     #[test]
-    fn transmission_pass_loads_attachments_and_uses_readwrite_access() {
+    fn transmission_pass_loads_attachments() {
         let pass = MeshPass::transmission();
         let config = &pass.config;
-
-        assert_eq!(config.hdr_access, ResourceAccess::ReadWrite);
-        assert_eq!(config.entity_access, ResourceAccess::ReadWrite);
-        assert_eq!(config.depth_access, ResourceAccess::ReadWrite);
 
         assert!(matches!(
             &config.hdr_load,

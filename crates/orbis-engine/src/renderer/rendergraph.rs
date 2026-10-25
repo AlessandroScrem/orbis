@@ -349,8 +349,7 @@ impl RenderGraph {
     /// Compiles the graph and derives resource lifetimes in execution-order indices.
     ///
     /// The framebuffer cache consumes these lifetimes to resolve logical targets
-    /// to retained pool allocations before execution. RenderContext then checks
-    /// each pass's declared resource access while exposing those resolved targets.
+    /// to retained pool allocations before execution.
     pub(crate) fn compile_lifetimes(&self) -> Result<(Vec<usize>, Vec<ResourceLifetime>), String> {
         let order = self.compile()?;
         let mut execution_index = vec![0; order.len()];
@@ -437,7 +436,6 @@ impl RenderGraph {
     ) {
         for &idx in &compiled.order {
             let pass = &mut self.passes[idx];
-            ctx.begin_pass(pass.reads(), pass.writes());
             pass.execute(encoder, ctx, frame);
         }
     }
