@@ -107,8 +107,8 @@ pub struct CompiledRenderGraph {
 }
 
 impl CompiledRenderGraph {
-    pub fn new(order: Vec<usize>, lifetimes: Vec<ResourceLifetime>) -> Self {
-        Self { order, lifetimes }
+    pub(crate) fn lifetimes(&self) -> &[ResourceLifetime] {
+        &self.lifetimes
     }
 }
 
@@ -341,7 +341,7 @@ impl RenderGraph {
         Ok(result)
     }
 
-    fn compile_persistent(&self) -> Result<CompiledRenderGraph, String> {
+    pub(crate) fn compile_persistent(&self) -> Result<CompiledRenderGraph, String> {
         let (order, lifetimes) = self.compile_lifetimes()?;
         Ok(CompiledRenderGraph { order, lifetimes })
     }
@@ -430,17 +430,16 @@ impl RenderGraph {
     // -------------------------
     pub(crate) fn execute(
         &mut self,
+        compiled: &CompiledRenderGraph,
         encoder: &mut wgpu::CommandEncoder,
         ctx: &mut RenderContext,
         frame: &FrameData,
-    ) -> Result<(), String> {
-        let order = self.compile()?;
-        for idx in order {
+    ) {
+        for &idx in &compiled.order {
             let pass = &mut self.passes[idx];
             ctx.begin_pass(pass.reads(), pass.writes());
             pass.execute(encoder, ctx, frame);
         }
-        Ok(())
     }
 }
 
