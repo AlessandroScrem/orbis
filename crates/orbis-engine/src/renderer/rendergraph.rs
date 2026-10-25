@@ -101,7 +101,7 @@ pub(crate) struct RenderGraph {
 }
 
 #[derive(Debug, Default)]
-pub struct CompiledRenderGraph {
+pub(crate) struct CompiledRenderGraph {
     order: Vec<usize>,
     lifetimes: Vec<ResourceLifetime>,
 }
@@ -479,9 +479,12 @@ mod tests {
 
         assert_eq!(compiled.order, vec![0, 1]);
 
-        // Verifica che la risorsa condivisa abbia:
-        // first_use = 0
-        // last_use = 1
+        let shadow_map = compiled
+            .lifetimes
+            .iter()
+            .find(|lifetime| lifetime.resource == ResourceId::SHADOWMAP)
+            .unwrap();
+        assert_eq!((shadow_map.first_use, shadow_map.last_use), (0, 1));
     }
 
     #[test]
