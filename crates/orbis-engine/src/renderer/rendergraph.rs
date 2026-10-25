@@ -437,7 +437,6 @@ impl RenderGraph {
     ) {
         for &idx in &compiled.order {
             let pass = &mut self.passes[idx];
-            ctx.begin_pass(pass.reads(), pass.writes());
             pass.execute(encoder, ctx, frame);
         }
     }
