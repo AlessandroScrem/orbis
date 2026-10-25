@@ -1,4 +1,3 @@
-use crate::renderer::scene_renderer::ResourceAccess;
 
 use super::*;
 
@@ -34,7 +33,7 @@ impl RenderPass for LightsIconPass {
                 label: Some("LightIcon Render Pass"),
                 color_attachments: &[
                     Some(wgpu::RenderPassColorAttachment {
-                        view: ctx.framebuffer_attachement_view(FramebufferKind::Hdr, ResourceAccess::ReadWrite),
+                        view: ctx.framebuffer_attachement_view(FramebufferKind::Hdr),
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Load,
@@ -44,7 +43,7 @@ impl RenderPass for LightsIconPass {
                     }),
                     // 1: entity ID
                     Some(wgpu::RenderPassColorAttachment {
-                        view: ctx.framebuffer_attachement_view(FramebufferKind::EntityId, ResourceAccess::ReadWrite),
+                        view: ctx.framebuffer_attachement_view(FramebufferKind::EntityId),
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Load,
                             store: wgpu::StoreOp::Store,
@@ -54,7 +53,7 @@ impl RenderPass for LightsIconPass {
                     }),
                 ],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: ctx.framebuffer_attachement_view(FramebufferKind::Depth, ResourceAccess::ReadWrite),
+                    view: ctx.framebuffer_attachement_view(FramebufferKind::Depth),
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
