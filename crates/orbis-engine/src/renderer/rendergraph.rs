@@ -100,6 +100,18 @@ pub(crate) struct RenderGraph {
     passes: Vec<Box<dyn RenderPass>>,
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct CompiledRenderGraph {
+    order: Vec<usize>,
+    lifetimes: Vec<ResourceLifetime>,
+}
+
+impl CompiledRenderGraph {
+    pub(crate) fn lifetimes(&self) -> &[ResourceLifetime] {
+        &self.lifetimes
+    }
+}
+
 /// Inclusive pass-order lifetime of a logical render-graph resource.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ResourceLifetime {
@@ -329,6 +341,11 @@ impl RenderGraph {
         Ok(result)
     }
 
+    pub(crate) fn compile_persistent(&self) -> Result<CompiledRenderGraph, String> {
+        let (order, lifetimes) = self.compile_lifetimes()?;
+        Ok(CompiledRenderGraph { order, lifetimes })
+    }
+
     /// Compiles the graph and derives resource lifetimes in execution-order indices.
     ///
     /// The framebuffer cache consumes these lifetimes to resolve logical targets
@@ -413,17 +430,16 @@ impl RenderGraph {
     // -------------------------
     pub(crate) fn execute(
         &mut self,
+        compiled: &CompiledRenderGraph,
         encoder: &mut wgpu::CommandEncoder,
         ctx: &mut RenderContext,
         frame: &FrameData,
-    ) -> Result<(), String> {
-        let order = self.compile()?;
-        for idx in order {
+    ) {
+        for &idx in &compiled.order {
             let pass = &mut self.passes[idx];
             ctx.begin_pass(pass.reads(), pass.writes());
             pass.execute(encoder, ctx, frame);
         }
-        Ok(())
     }
 }
 
@@ -441,6 +457,35 @@ impl RenderGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compile_returns_persistent_graph() {
+        let graph = RenderGraph::new();
+
+        let compiled = graph.compile_persistent().unwrap();
+
+        assert!(compiled.order.is_empty());
+        assert!(compiled.lifetimes.is_empty());
+    }
+
+    #[test]
+    fn compile_persistent_preserves_order_and_lifetimes() {
+        let mut graph = RenderGraph::new();
+
+        graph.add_pass(ShadowPass{});
+        graph.add_pass(MeshPass::opaque());
+
+        let compiled = graph.compile_persistent().unwrap();
+
+        assert_eq!(compiled.order, vec![0, 1]);
+
+        let shadow_map = compiled
+            .lifetimes
+            .iter()
+            .find(|lifetime| lifetime.resource == ResourceId::SHADOWMAP)
+            .unwrap();
+        assert_eq!((shadow_map.first_use, shadow_map.last_use), (0, 1));
+    }
 
     #[test]
     fn should_run_in_order() {
