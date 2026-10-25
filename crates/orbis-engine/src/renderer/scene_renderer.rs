@@ -113,13 +113,32 @@ impl RenderContext<'_> {
         }
     }
 
+    fn with_framebuffer_view<T>(
+        kind: FramebufferKind,
+        access: ResourceAccess,
+        reads: &[ResourceId],
+        writes: &[ResourceId],
+        get_view: impl FnOnce(FramebufferKind) -> T,
+    ) -> T {
+        let resource = Self::resource_for_framebuffer(kind);
+
+        Self::assert_resource_access(resource, access, reads, writes);
+
+        get_view(kind)
+    }
+
     pub(crate) fn framebuffer_attachement_view(
         &self,
         kind: FramebufferKind,
         access: ResourceAccess,
     ) -> &wgpu::TextureView {
-        self.assert_framebuffer_access(kind, access);
-        self.gpu_mgr.get_framebuffer_view(kind)
+        Self::with_framebuffer_view(
+            kind,
+            access,
+            &self.active_pass_reads,
+            &self.active_pass_writes,
+            |kind| self.gpu_mgr.get_framebuffer_view(kind),
+        )
     }
 
     pub(crate) fn framebuffer_texture(&self, kind: FramebufferKind) -> &wgpu::Texture {
@@ -388,6 +407,34 @@ mod render_context_tests {
             RenderContext::resource_for_framebuffer(FramebufferKind::Depth),
             ResourceId::DEPTH
         );
+    }
+
+    #[test]
+    fn framebuffer_view_access_rejects_undeclared_resource_before_lookup() {
+        let result = std::panic::catch_unwind(|| {
+            RenderContext::with_framebuffer_view(
+                FramebufferKind::Depth,
+                ResourceAccess::Read,
+                &[ResourceId::HDR],
+                &[ResourceId::ENTITY],
+                |_| {},
+            );
+        });
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn framebuffer_view_access_allows_declared_resource() {
+        let result = RenderContext::with_framebuffer_view(
+            FramebufferKind::Hdr,
+            ResourceAccess::Read,
+            &[ResourceId::HDR],
+            &[],
+            |_| true,
+        );
+
+        assert!(result);
     }
 
     #[test]
