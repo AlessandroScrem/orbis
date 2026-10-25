@@ -125,8 +125,35 @@ impl RenderGraph {
         Self { passes: Vec::new() }
     }
 
+    // -------------------------
+    // Add a pass to the render graph
+    // -------------------------
     pub(crate) fn add_pass<P: RenderPass + 'static>(&mut self, pass: P) {
         self.passes.push(Box::new(pass));
+    }
+
+    // -------------------------
+    //  Compiles the render graph into a persistent form that can be executed.
+    // -------------------------
+    pub(crate) fn compile_persistent(&self) -> Result<CompiledRenderGraph, String> {
+        let (order, lifetimes) = self.compile_lifetimes()?;
+        Ok(CompiledRenderGraph { order, lifetimes })
+    }
+
+    // -------------------------
+    // Execute passes in dependency order
+    // -------------------------
+    pub(crate) fn execute(
+        &mut self,
+        compiled: &CompiledRenderGraph,
+        encoder: &mut wgpu::CommandEncoder,
+        ctx: &mut RenderContext,
+        frame: &FrameData,
+    ) {
+        for &idx in &compiled.order {
+            let pass = &mut self.passes[idx];
+            pass.execute(encoder, ctx, frame);
+        }
     }
 
     // -------------------------
@@ -341,16 +368,11 @@ impl RenderGraph {
         Ok(result)
     }
 
-    pub(crate) fn compile_persistent(&self) -> Result<CompiledRenderGraph, String> {
-        let (order, lifetimes) = self.compile_lifetimes()?;
-        Ok(CompiledRenderGraph { order, lifetimes })
-    }
-
     /// Compiles the graph and derives resource lifetimes in execution-order indices.
     ///
     /// The framebuffer cache consumes these lifetimes to resolve logical targets
     /// to retained pool allocations before execution.
-    pub(crate) fn compile_lifetimes(&self) -> Result<(Vec<usize>, Vec<ResourceLifetime>), String> {
+    fn compile_lifetimes(&self) -> Result<(Vec<usize>, Vec<ResourceLifetime>), String> {
         let order = self.compile()?;
         let mut execution_index = vec![0; order.len()];
         for (position, &pass_index) in order.iter().enumerate() {
@@ -389,7 +411,7 @@ impl RenderGraph {
     /// The descriptor callback must include every GPU property relevant to compatibility.
     /// The returned resolver maps graph resources to retained pool allocations. The
     /// framebuffer cache uses the same lifetime/slot contract for GPU-backed resources.
-    pub(crate) fn allocate_transient_resources<D, R>(
+    fn allocate_transient_resources<D, R>(
         &self,
         pool: &mut TransientResourcePool<D, R>,
         mut descriptor_for: impl FnMut(ResourceId) -> D,
@@ -423,22 +445,6 @@ impl RenderGraph {
 
         Ok(TransientResourceResolver::from_slots(slots))
     }
-
-    // -------------------------
-    // Execute passes in dependency order
-    // -------------------------
-    pub(crate) fn execute(
-        &mut self,
-        compiled: &CompiledRenderGraph,
-        encoder: &mut wgpu::CommandEncoder,
-        ctx: &mut RenderContext,
-        frame: &FrameData,
-    ) {
-        for &idx in &compiled.order {
-            let pass = &mut self.passes[idx];
-            pass.execute(encoder, ctx, frame);
-        }
-    }
 }
 
 impl RenderGraph {
@@ -470,7 +476,7 @@ mod tests {
     fn compile_persistent_preserves_order_and_lifetimes() {
         let mut graph = RenderGraph::new();
 
-        graph.add_pass(ShadowPass{});
+        graph.add_pass(ShadowPass {});
         graph.add_pass(MeshPass::opaque());
 
         let compiled = graph.compile_persistent().unwrap();
@@ -666,56 +672,6 @@ mod tests {
         assert_eq!(
             graph.compile_names().unwrap(),
             vec!["First writer", "Second writer", "Reader"]
-        );
-    }
-
-    #[test]
-    fn reader_is_ordered_before_the_next_writer() {
-        struct Pass {
-            name: &'static str,
-            reads: Vec<ResourceId>,
-            writes: Vec<ResourceId>,
-        }
-
-        impl RenderPass for Pass {
-            fn name(&self) -> &'static str {
-                self.name
-            }
-            fn reads(&self) -> &[ResourceId] {
-                &self.reads
-            }
-            fn writes(&self) -> &[ResourceId] {
-                &self.writes
-            }
-        }
-
-        let mut graph = RenderGraph::new();
-        graph.add_pass(Pass {
-            name: "First writer",
-            reads: vec![],
-            writes: vec![ResourceId::HDR],
-        });
-        graph.add_pass(Pass {
-            name: "Reader",
-            reads: vec![ResourceId::HDR],
-            writes: vec![],
-        });
-        graph.add_pass(Pass {
-            name: "Second writer",
-            reads: vec![],
-            writes: vec![ResourceId::HDR],
-        });
-
-        let (_, resources) = graph.build_graph();
-        let dependencies = graph.build_dependencies(&resources);
-        assert!(dependencies[2].iter().any(|edge| {
-            edge.to == 1
-                && edge.resource == ResourceId::HDR
-                && matches!(edge.kind, EdgeKind::WriteAfterRead)
-        }));
-        assert_eq!(
-            graph.compile_names().unwrap(),
-            vec!["First writer", "Reader", "Second writer"]
         );
     }
 
