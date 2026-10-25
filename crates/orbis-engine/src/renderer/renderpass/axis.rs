@@ -1,3 +1,5 @@
+use crate::renderer::scene_renderer::ResourceAccess;
+
 use super::*;
 
 pub struct AxisPass {}
@@ -24,14 +26,13 @@ impl RenderPass for AxisPass {
             return;
         }
 
-        let gpu_manager = ctx.gpu_mgr;
         let pipeline_manager = ctx.pip_mgr;
 
         // Render pass
         let mut renderpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Axis Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: ctx.framebuffer_view(FramebufferKind::Hdr),
+                view: ctx.framebuffer_attachement_view(FramebufferKind::Hdr, ResourceAccess::ReadWrite),
                 resolve_target: None,
                 depth_slice: None,
                 ops: wgpu::Operations {
@@ -48,8 +49,25 @@ impl RenderPass for AxisPass {
         let pipeline = pipeline_manager.get_render_pipeline(PipelineKind::Lines);
 
         renderpass.set_pipeline(pipeline);
-        renderpass.set_bind_group(0, gpu_manager.get_bindgroup(BindgroupKind::Camera), &[]);
-        renderpass.set_vertex_buffer(0, gpu_manager.get_buffer(BufferKind::Axis).slice(0..));
+        renderpass.set_bind_group(0, ctx.bindgroup(BindgroupKind::Camera), &[]);
+        renderpass.set_vertex_buffer(0, ctx.buffer(BufferKind::Axis).slice(0..));
         renderpass.draw(0..6, 0..1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    //Test single passes.
+    #[test]
+    fn axis_passes_declare_expected_resource_access() {
+        let pass = RenderPassEnum::Axis(AxisPass{});
+        
+        assert_eq!(pass.reads(), &[ResourceId::HDR]);
+        assert_eq!(
+            pass.writes(),
+            &[ResourceId::HDR]
+        );
     }
 }

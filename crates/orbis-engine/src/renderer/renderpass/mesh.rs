@@ -1,5 +1,8 @@
+use crate::renderer::scene_renderer::ResourceAccess;
+
 use super::*;
 
+#[derive(PartialEq, Clone, Copy)]
 pub enum MeshPassMode {
     Opaque,
     Transmission,
@@ -7,6 +10,9 @@ pub enum MeshPassMode {
 
 pub struct MeshPassConfig {
     pub hdr_load: wgpu::LoadOp<wgpu::Color>,
+    pub hdr_access: ResourceAccess,
+    pub entity_access: ResourceAccess,
+    pub depth_access: ResourceAccess,
     pub entity_load: wgpu::LoadOp<wgpu::Color>,
     pub depth_load: wgpu::LoadOp<f32>,
     pub mode: MeshPassMode,
@@ -17,29 +23,38 @@ pub struct MeshPass {
 }
 
 impl MeshPass {
+    const HDR_CLEAR: wgpu::Color = wgpu::Color {
+        r: 0.1,
+        g: 0.2,
+        b: 0.3,
+        a: 1.0,
+    };
+    const ENTITY_CLEAR: wgpu::Color = wgpu::Color::BLACK;
+    const DEPTH_CLEAR: f32 = 1.0;
+
     pub fn opaque() -> Self {
-        let clear_color = wgpu::Color {
-            r: 0.1,
-            g: 0.2,
-            b: 0.3,
-            a: 1.0,
-        };
         Self {
             config: MeshPassConfig {
-                hdr_load: wgpu::LoadOp::Clear(clear_color),
-                entity_load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                depth_load: wgpu::LoadOp::Clear(1.0),
                 mode: MeshPassMode::Opaque,
+                hdr_load: wgpu::LoadOp::Clear(Self::HDR_CLEAR),
+                entity_load: wgpu::LoadOp::Clear(Self::ENTITY_CLEAR),
+                depth_load: wgpu::LoadOp::Clear(Self::DEPTH_CLEAR),
+                hdr_access: ResourceAccess::Write,
+                entity_access: ResourceAccess::Write,
+                depth_access: ResourceAccess::Write,
             },
         }
     }
     pub fn transmission() -> Self {
         Self {
             config: MeshPassConfig {
+                mode: MeshPassMode::Transmission,
                 hdr_load: wgpu::LoadOp::Load,
                 entity_load: wgpu::LoadOp::Load,
                 depth_load: wgpu::LoadOp::Load,
-                mode: MeshPassMode::Transmission,
+                hdr_access: ResourceAccess::ReadWrite,
+                entity_access: ResourceAccess::ReadWrite,
+                depth_access: ResourceAccess::ReadWrite,
             },
         }
     }
@@ -67,12 +82,7 @@ impl RenderPass for MeshPass {
     }
     fn writes(&self) -> &[ResourceId] {
         match self.config.mode {
-            MeshPassMode::Opaque => &[
-                ResourceId::HDR,
-                ResourceId::OPAQUE,
-                ResourceId::ENTITY,
-                ResourceId::DEPTH,
-            ],
+            MeshPassMode::Opaque => &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH],
             MeshPassMode::Transmission => &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH],
         }
     }
@@ -88,7 +98,6 @@ impl RenderPass for MeshPass {
             MeshPassMode::Transmission => &frame.transmission_batches,
         };
 
-        let gpu_manager = ctx.gpu_mgr;
         let pipeline_manager = ctx.pip_mgr;
 
         let mut renderpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -96,7 +105,8 @@ impl RenderPass for MeshPass {
             color_attachments: &[
                 // 0: opaque object
                 Some(wgpu::RenderPassColorAttachment {
-                    view: ctx.framebuffer_view(FramebufferKind::Hdr),
+                    view: ctx
+                        .framebuffer_attachement_view(FramebufferKind::Hdr, self.config.hdr_access),
                     ops: wgpu::Operations {
                         load: self.config.hdr_load,
                         store: wgpu::StoreOp::Store,
@@ -106,7 +116,10 @@ impl RenderPass for MeshPass {
                 }),
                 // 1: entity ID
                 Some(wgpu::RenderPassColorAttachment {
-                    view: ctx.framebuffer_view(FramebufferKind::EntityId),
+                    view: ctx.framebuffer_attachement_view(
+                        FramebufferKind::EntityId,
+                        self.config.entity_access,
+                    ),
                     ops: wgpu::Operations {
                         load: self.config.entity_load,
                         store: wgpu::StoreOp::Store,
@@ -116,7 +129,8 @@ impl RenderPass for MeshPass {
                 }),
             ],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: ctx.framebuffer_view(FramebufferKind::Depth),
+                view: ctx
+                    .framebuffer_attachement_view(FramebufferKind::Depth, self.config.depth_access),
                 depth_ops: Some(wgpu::Operations {
                     load: self.config.depth_load,
                     store: wgpu::StoreOp::Store,
@@ -129,13 +143,13 @@ impl RenderPass for MeshPass {
         let render_pipeline = pipeline_manager.get_render_pipeline(PipelineKind::Pbr);
 
         renderpass.set_pipeline(render_pipeline);
-        renderpass.set_bind_group(0, gpu_manager.get_bindgroup(BindgroupKind::Perframe), &[]);
-        renderpass.set_bind_group(3, gpu_manager.get_bindgroup(BindgroupKind::PbrMap), &[]);
+        renderpass.set_bind_group(0, ctx.bindgroup(BindgroupKind::Perframe), &[]);
+        renderpass.set_bind_group(3, ctx.pbr_map_bind_group(self.config.mode), &[]);
 
         // -------------------------------------------------
         // INSTANCE BUFFER
         // -------------------------------------------------
-        renderpass.set_vertex_buffer(1, gpu_manager.get_buffer(BufferKind::Instances).slice(..));
+        renderpass.set_vertex_buffer(1, ctx.buffer(BufferKind::Instances).slice(..));
 
         // -------------------------------------------------
         // SORT BY MATERIAL
@@ -185,5 +199,84 @@ impl RenderPass for MeshPass {
                 batch.instance_start..batch.instance_start + batch.instance_count,
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    //Test single passes.
+    #[test]
+    fn mesh_passes_declare_expected_resource_access() {
+        let opaque_pass = MeshPass::opaque();
+
+        assert_eq!(opaque_pass.reads(), &[ResourceId::SHADOWMAP]);
+        assert_eq!(
+            opaque_pass.writes(),
+            &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH]
+        );
+
+        let transmission_pass = RenderPassEnum::Mesh(MeshPass::transmission());
+        assert_eq!(
+            transmission_pass.reads(),
+            &[
+                ResourceId::HDR,
+                ResourceId::OPAQUE,
+                ResourceId::ENTITY,
+                ResourceId::DEPTH,
+                ResourceId::SHADOWMAP
+            ]
+        );
+        assert_eq!(
+            transmission_pass.writes(),
+            &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH]
+        );
+    }
+
+    #[test]
+    fn opaque_pass_clears_attachments_and_uses_write_access() {
+        let pass = MeshPass::opaque();
+        let config = &pass.config;
+
+        assert_eq!(config.hdr_access, ResourceAccess::Write);
+        assert_eq!(config.entity_access, ResourceAccess::Write);
+        assert_eq!(config.depth_access, ResourceAccess::Write);
+
+        assert!(matches!(
+            &config.hdr_load,
+            wgpu::LoadOp::Clear(MeshPass::HDR_CLEAR)
+        ));
+        assert!(matches!(
+            &config.entity_load,
+            wgpu::LoadOp::Clear(MeshPass::ENTITY_CLEAR)
+        ));
+        assert!(matches!(
+            &config.depth_load,
+            wgpu::LoadOp::Clear(MeshPass::DEPTH_CLEAR)
+        ));
+    }
+
+    #[test]
+    fn transmission_pass_loads_attachments_and_uses_readwrite_access() {
+        let pass = MeshPass::transmission();
+        let config = &pass.config;
+
+        assert_eq!(config.hdr_access, ResourceAccess::ReadWrite);
+        assert_eq!(config.entity_access, ResourceAccess::ReadWrite);
+        assert_eq!(config.depth_access, ResourceAccess::ReadWrite);
+
+        assert!(matches!(
+            &config.hdr_load,
+            wgpu::LoadOp::Load
+        ));
+        assert!(matches!(
+            &config.entity_load,
+            wgpu::LoadOp::Load
+        ));
+        assert!(matches!(
+            &config.depth_load,
+            wgpu::LoadOp::Load
+        ));
     }
 }

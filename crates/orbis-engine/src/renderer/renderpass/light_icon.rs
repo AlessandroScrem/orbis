@@ -1,3 +1,5 @@
+use crate::renderer::scene_renderer::ResourceAccess;
+
 use super::*;
 
 pub struct LightsIconPass {}
@@ -25,7 +27,6 @@ impl RenderPass for LightsIconPass {
                 return;
             }
 
-            let gpu_manager = ctx.gpu_mgr;
             let pipeline_manager = ctx.pip_mgr;
 
             // Render pass
@@ -33,7 +34,7 @@ impl RenderPass for LightsIconPass {
                 label: Some("LightIcon Render Pass"),
                 color_attachments: &[
                     Some(wgpu::RenderPassColorAttachment {
-                        view: ctx.framebuffer_view(FramebufferKind::Hdr),
+                        view: ctx.framebuffer_attachement_view(FramebufferKind::Hdr, ResourceAccess::ReadWrite),
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Load,
@@ -43,7 +44,7 @@ impl RenderPass for LightsIconPass {
                     }),
                     // 1: entity ID
                     Some(wgpu::RenderPassColorAttachment {
-                        view: ctx.framebuffer_view(FramebufferKind::EntityId),
+                        view: ctx.framebuffer_attachement_view(FramebufferKind::EntityId, ResourceAccess::ReadWrite),
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Load,
                             store: wgpu::StoreOp::Store,
@@ -53,7 +54,7 @@ impl RenderPass for LightsIconPass {
                     }),
                 ],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: ctx.framebuffer_view(FramebufferKind::Depth),
+                    view: ctx.framebuffer_attachement_view(FramebufferKind::Depth, ResourceAccess::ReadWrite),
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -66,8 +67,8 @@ impl RenderPass for LightsIconPass {
             });
 
             let pipeline = pipeline_manager.get_render_pipeline(PipelineKind::LightIcon);
-            let perframe_bg = gpu_manager.get_bindgroup(BindgroupKind::Perframe);
-            let light_bg = gpu_manager.get_bindgroup(BindgroupKind::LightIcon);
+            let perframe_bg = ctx.bindgroup(BindgroupKind::Perframe);
+            let light_bg = ctx.bindgroup(BindgroupKind::LightIcon);
 
             renderpass.set_pipeline(pipeline);
             renderpass.set_bind_group(0, perframe_bg, &[]);
@@ -81,9 +82,15 @@ impl RenderPass for LightsIconPass {
 mod tests {
     use super::*;
 
+    //Test single passes.
     #[test]
-    fn declares_entity_id_attachment_as_written() {
-        let pass = LightsIconPass {};
-        assert!(pass.writes().contains(&ResourceId::ENTITY));
+    fn lights_icon_passes_declare_expected_resource_access() {
+        let pass = RenderPassEnum::LightsIcon(LightsIconPass{});
+        
+        assert_eq!(pass.reads(), &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH]);
+        assert_eq!(
+            pass.writes(),
+            &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH]
+        );
     }
 }

@@ -1,3 +1,5 @@
+use crate::renderer::scene_renderer::ResourceAccess;
+
 use super::*;
 
 pub struct SkyboxPass {}
@@ -25,15 +27,14 @@ impl RenderPass for SkyboxPass {
         }
 
         let skybox_blur = frame.tasks.skybox_blur;
-
-        let gpu_manager = ctx.gpu_mgr;
         let pipeline_manager = ctx.pip_mgr;
 
         // Render pass
         let mut renderpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Skybox Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: ctx.framebuffer_view(FramebufferKind::Hdr),
+                view: ctx
+                    .framebuffer_attachement_view(FramebufferKind::Hdr, ResourceAccess::ReadWrite),
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,
                     store: wgpu::StoreOp::Store,
@@ -42,7 +43,7 @@ impl RenderPass for SkyboxPass {
                 depth_slice: None,
             })],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: ctx.framebuffer_view(FramebufferKind::Depth),
+                view: ctx.framebuffer_attachement_view(FramebufferKind::Depth, ResourceAccess::ReadWrite),
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Load,
                     store: wgpu::StoreOp::Store,
@@ -53,11 +54,28 @@ impl RenderPass for SkyboxPass {
         });
 
         let pipeline = pipeline_manager.get_render_pipeline(PipelineKind::Skybox);
-        let skybox_bind_group = gpu_manager.get_ibl_skybox_bg(skybox_blur);
+        let skybox_bind_group = ctx.ibl_skybox_bind_group(skybox_blur);
 
         renderpass.set_pipeline(pipeline);
-        renderpass.set_bind_group(0, gpu_manager.get_bindgroup(BindgroupKind::Perframe), &[]);
+        renderpass.set_bind_group(0, ctx.bindgroup(BindgroupKind::Perframe), &[]);
         renderpass.set_bind_group(1, skybox_bind_group, &[]);
         renderpass.draw(0..36, 0..1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    //Test single passes.
+    #[test]
+    fn skybox_passes_declare_expected_resource_access() {
+        let pass = RenderPassEnum::Skybox(SkyboxPass{});
+        
+        assert_eq!(pass.reads(), &[ResourceId::HDR, ResourceId::DEPTH]);
+        assert_eq!(
+            pass.writes(),
+            &[ResourceId::HDR, ResourceId::DEPTH]
+        );
     }
 }

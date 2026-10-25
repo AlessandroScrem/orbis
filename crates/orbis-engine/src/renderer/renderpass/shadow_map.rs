@@ -29,6 +29,15 @@ impl RenderPass for ShadowPass {
             return;
         };
 
+        if lights
+            .lights
+            .iter()
+            .take(lights.count as usize)
+            .any(|light| light.cast_shadow.is_one())
+        {
+            ctx.assert_shadowmap_write_access();
+        }
+
         for (slot, light) in lights
             .lights
             .iter()
@@ -39,7 +48,7 @@ impl RenderPass for ShadowPass {
             if let Some(shadow_view) = ctx.shadow_mgr.get_shadowmap_view(slot) {
                 let size = size_of::<LightUniform>() as u64;
                 let offset = slot as u64 * size;
-                let source = ctx.gpu_mgr.get_buffer(BufferKind::Lights);
+                let source = ctx.buffer(BufferKind::Lights);
                 let dest = ctx.shadow_mgr.get_buffer();
                 encoder.copy_buffer_to_buffer(source, offset, dest, 0, size);
 
@@ -62,7 +71,6 @@ fn build_shadowmap(
 ) {
     let batches = &frame.opaque_batches;
 
-    let gpu_manager = ctx.gpu_mgr;
     let bindgroup = ctx.shadow_mgr.get_bg();
     let pipeline = ctx.shadow_mgr.get_pipeline();
 
@@ -86,7 +94,7 @@ fn build_shadowmap(
     // -------------------------------------------------
     // INSTANCE BUFFER
     // -------------------------------------------------
-    renderpass.set_vertex_buffer(1, gpu_manager.get_buffer(BufferKind::Instances).slice(..));
+    renderpass.set_vertex_buffer(1, ctx.buffer(BufferKind::Instances).slice(..));
 
     // -------------------------------------------------
     // DRAW
@@ -122,7 +130,7 @@ fn convert_texture(
     ctx: &mut RenderContext,
     shadow_view: &wgpu::TextureView,
 ) {
-    let layout = ctx.gpu_mgr.get_bindgroup_layout(BindgroupLayoutKind::Depth);
+    let layout = ctx.bindgroup_layout(BindgroupLayoutKind::Depth);
     let sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
         mag_filter: wgpu::FilterMode::Nearest,
         min_filter: wgpu::FilterMode::Nearest,
@@ -170,3 +178,21 @@ fn convert_texture(
 
     renderpass.draw(0..3, 0..1);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    //Test single passes.
+    #[test]
+    fn shadow_map_passes_declare_expected_resource_access() {
+        let pass = RenderPassEnum::Shadow(ShadowPass{});
+        
+        assert_eq!(pass.reads(), &[]);
+        assert_eq!(
+            pass.writes(),
+            &[ResourceId::SHADOWMAP]
+        );
+    }
+}
+

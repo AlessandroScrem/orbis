@@ -25,7 +25,6 @@ impl RenderPass for OutlinePass {
         }
 
         let frame_view = &ctx.target;
-        let gpu_manager = ctx.gpu_mgr;
         let pipeline_manager = ctx.pip_mgr;
 
         // Render pass
@@ -51,7 +50,24 @@ impl RenderPass for OutlinePass {
             ctx.framebuffer_bind_group(FramebufferKind::EntityId),
             &[],
         );
-        renderpass.set_bind_group(1, gpu_manager.get_bindgroup(BindgroupKind::Perframe), &[]);
+        renderpass.set_bind_group(1, ctx.bindgroup(BindgroupKind::Perframe), &[]);
         renderpass.draw(0..3, 0..1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    //Test single passes.
+    #[test]
+    fn outline_passes_declare_expected_resource_access() {
+        let pass = RenderPassEnum::Outline(OutlinePass{});
+        
+        assert_eq!(pass.reads(), &[ResourceId::ENTITY, ResourceId::LDR]);
+        assert_eq!(
+            pass.writes(),
+            &[ResourceId::LDR]
+        );
     }
 }

@@ -1,5 +1,8 @@
 use crate::gpu::pipeline_manager::PipelineManager;
-use crate::gpu::{FramebufferKind, GpuCache, GpuContext, GpuManager, ShadowManager};
+use crate::gpu::{
+    BindgroupKind, BindgroupLayoutKind, BufferKind, FramebufferKind, GpuCache, GpuContext,
+    GpuManager, ShadowManager,
+};
 use crate::prelude::{debug, info};
 use crate::renderer::framebuilder::{DrawStats, FrameData};
 use crate::renderer::rendergraph::{RenderGraph, ResourceId};
@@ -14,14 +17,33 @@ pub struct SceneRenderContext<'a> {
     pub gpu_cache: &'a GpuCache,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourceAccess {
+    Read,
+    Write,
+    ReadWrite,
+}
+
+use std::fmt;
+impl fmt::Display for ResourceAccess {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match *self {
+            Self::Read => "Read",
+            Self::Write => "Write",
+            Self::ReadWrite => "ReadWrite",
+        };
+        write!(f, "{}", name)
+    }
+}
+
 pub struct RenderContext<'a> {
     pub device: &'a Device,
     pub gpu_cache: &'a GpuCache,
-
-    pub gpu_mgr: &'a GpuManager,
     pub shadow_mgr: &'a ShadowManager,
     pub pip_mgr: &'a PipelineManager,
     pub target: &'a wgpu::TextureView,
+
+    gpu_mgr: &'a GpuManager,
     active_pass_reads: Vec<ResourceId>,
     active_pass_writes: Vec<ResourceId>,
 }
@@ -34,11 +56,30 @@ impl RenderContext<'_> {
         self.active_pass_writes.extend_from_slice(writes);
     }
 
-    fn assert_framebuffer_access(&self, kind: FramebufferKind) {
+    fn assert_framebuffer_access(&self, kind: FramebufferKind, access: ResourceAccess) {
         let resource = Self::resource_for_framebuffer(kind);
+        Self::assert_resource_access(
+            resource,
+            access,
+            &self.active_pass_reads,
+            &self.active_pass_writes,
+        );
+    }
+
+    fn assert_resource_access(
+        resource: ResourceId,
+        access: ResourceAccess,
+        reads: &[ResourceId],
+        writes: &[ResourceId],
+    ) {
         assert!(
-            Self::resource_is_declared(resource, &self.active_pass_reads, &self.active_pass_writes,),
-            "render pass accessed undeclared framebuffer resource {resource}"
+            Self::resource_is_declared(resource, reads, writes),
+            "render pass accessed undeclared resource {resource}"
+        );
+
+        assert!(
+            Self::resource_access_is_declared(resource, access, reads, writes,),
+            "render pass accessed resource {resource} with invalid access {access}"
         );
     }
 
@@ -50,6 +91,19 @@ impl RenderContext<'_> {
         reads.contains(&resource) || writes.contains(&resource)
     }
 
+    fn resource_access_is_declared(
+        resource: ResourceId,
+        access: ResourceAccess,
+        reads: &[ResourceId],
+        writes: &[ResourceId],
+    ) -> bool {
+        match access {
+            ResourceAccess::Read => reads.contains(&resource),
+            ResourceAccess::Write => writes.contains(&resource),
+            ResourceAccess::ReadWrite => reads.contains(&resource) && writes.contains(&resource),
+        }
+    }
+
     fn resource_for_framebuffer(kind: FramebufferKind) -> ResourceId {
         match kind {
             FramebufferKind::Hdr => ResourceId::HDR,
@@ -59,24 +113,98 @@ impl RenderContext<'_> {
         }
     }
 
-    pub(crate) fn framebuffer_view(&self, kind: FramebufferKind) -> &wgpu::TextureView {
-        self.assert_framebuffer_access(kind);
-        self.gpu_mgr.get_framebuffer_view(kind)
+    fn with_framebuffer_view<T>(
+        kind: FramebufferKind,
+        access: ResourceAccess,
+        reads: &[ResourceId],
+        writes: &[ResourceId],
+        get_view: impl FnOnce(FramebufferKind) -> T,
+    ) -> T {
+        let resource = Self::resource_for_framebuffer(kind);
+
+        Self::assert_resource_access(resource, access, reads, writes);
+
+        get_view(kind)
+    }
+
+    pub(crate) fn framebuffer_attachement_view(
+        &self,
+        kind: FramebufferKind,
+        access: ResourceAccess,
+    ) -> &wgpu::TextureView {
+        Self::with_framebuffer_view(
+            kind,
+            access,
+            &self.active_pass_reads,
+            &self.active_pass_writes,
+            |kind| self.gpu_mgr.get_framebuffer_view(kind),
+        )
     }
 
     pub(crate) fn framebuffer_texture(&self, kind: FramebufferKind) -> &wgpu::Texture {
-        self.assert_framebuffer_access(kind);
+        self.assert_framebuffer_access(kind, ResourceAccess::Read);
         self.gpu_mgr.get_framebuffer_texture(kind)
     }
 
     pub(crate) fn framebuffer_sampler(&self, kind: FramebufferKind) -> &wgpu::Sampler {
-        self.assert_framebuffer_access(kind);
+        self.assert_framebuffer_access(kind, ResourceAccess::Read);
         self.gpu_mgr.get_framebuffer_sampler(kind)
     }
 
     pub(crate) fn framebuffer_bind_group(&self, kind: FramebufferKind) -> &wgpu::BindGroup {
-        self.assert_framebuffer_access(kind);
+        self.assert_framebuffer_access(kind, ResourceAccess::Read);
         self.gpu_mgr.get_framebuffer_bg(kind)
+    }
+
+    pub(crate) fn assert_shadowmap_write_access(&self) {
+        Self::assert_resource_access(
+            ResourceId::SHADOWMAP,
+            ResourceAccess::Write,
+            &self.active_pass_reads,
+            &self.active_pass_writes,
+        );
+    }
+
+    pub(crate) fn pbr_map_bind_group(&self, config_mode: MeshPassMode) -> &wgpu::BindGroup {
+        // The transmission pass samples the opaque scene color;
+        // the opaque pass only needs the shadow map.
+        if config_mode == MeshPassMode::Transmission {
+            Self::assert_resource_access(
+                ResourceId::OPAQUE,
+                ResourceAccess::Read,
+                &self.active_pass_reads,
+                &self.active_pass_writes,
+            );
+        }
+        Self::assert_resource_access(
+            ResourceId::SHADOWMAP,
+            ResourceAccess::Read,
+            &self.active_pass_reads,
+            &self.active_pass_writes,
+        );
+
+        self.gpu_mgr.get_bindgroup(BindgroupKind::PbrMap)
+    }
+
+    pub(crate) fn buffer(&self, kind: BufferKind) -> &wgpu::Buffer {
+        self.gpu_mgr.get_buffer(kind)
+    }
+
+    pub(crate) fn bindgroup_layout(&self, kind: BindgroupLayoutKind) -> &wgpu::BindGroupLayout {
+        self.gpu_mgr.get_bindgroup_layout(kind)
+    }
+
+    pub(crate) fn bindgroup(&self, kind: BindgroupKind) -> &wgpu::BindGroup {
+        assert!(
+            !matches!(kind, BindgroupKind::PbrMap),
+            "PbrMap bind group must use a resource-aware accessor"
+        );
+
+        self.gpu_mgr.get_bindgroup(kind)
+    }
+
+    pub(crate) fn ibl_skybox_bind_group(&self, skybox_blur: bool) -> &wgpu::BindGroup {
+        self.gpu_mgr.get_ibl_skybox_bg(skybox_blur)
     }
 }
 
@@ -282,6 +410,47 @@ mod render_context_tests {
     }
 
     #[test]
+    fn framebuffer_view_access_rejects_undeclared_resource() {
+        let result = std::panic::catch_unwind(|| {
+            RenderContext::with_framebuffer_view(
+                FramebufferKind::Depth,
+                ResourceAccess::Read,
+                &[ResourceId::HDR],
+                &[ResourceId::ENTITY],
+                |_| {},
+            );
+        });
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn framebuffer_view_access_allows_declared_resource() {
+        let result = RenderContext::with_framebuffer_view(
+            FramebufferKind::Hdr,
+            ResourceAccess::Read,
+            &[ResourceId::HDR],
+            &[],
+            |_| true,
+        );
+
+        assert!(result);
+    }
+
+    #[test]
+    fn undeclared_resource_access_panics() {
+        let result = std::panic::catch_unwind(|| {
+            RenderContext::assert_resource_access(
+                ResourceId::DEPTH,
+                ResourceAccess::Read,
+                &[ResourceId::HDR],
+                &[ResourceId::ENTITY],
+            );
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn declared_reads_and_writes_allow_framebuffer_access() {
         assert!(RenderContext::resource_is_declared(
             ResourceId::HDR,
@@ -302,5 +471,86 @@ mod render_context_tests {
             &[ResourceId::HDR],
             &[ResourceId::ENTITY],
         ));
+    }
+
+    #[test]
+    fn declared_read_allows_read_but_not_write() {
+        assert!(RenderContext::resource_access_is_declared(
+            ResourceId::HDR,
+            ResourceAccess::Read,
+            &[ResourceId::HDR],
+            &[],
+        ));
+        assert!(!RenderContext::resource_access_is_declared(
+            ResourceId::HDR,
+            ResourceAccess::Write,
+            &[ResourceId::HDR],
+            &[],
+        ));
+    }
+
+    #[test]
+    fn declared_write_allows_write_but_not_read() {
+        assert!(RenderContext::resource_access_is_declared(
+            ResourceId::ENTITY,
+            ResourceAccess::Write,
+            &[],
+            &[ResourceId::ENTITY],
+        ));
+        assert!(!RenderContext::resource_access_is_declared(
+            ResourceId::ENTITY,
+            ResourceAccess::Read,
+            &[],
+            &[ResourceId::ENTITY],
+        ));
+    }
+
+    #[test]
+    fn read_modify_write_declaration_allows_both_access_modes() {
+        let reads = [ResourceId::HDR];
+        let writes = [ResourceId::HDR];
+
+        assert!(RenderContext::resource_access_is_declared(
+            ResourceId::HDR,
+            ResourceAccess::Read,
+            &reads,
+            &writes,
+        ));
+        assert!(RenderContext::resource_access_is_declared(
+            ResourceId::HDR,
+            ResourceAccess::Write,
+            &reads,
+            &writes,
+        ));
+        assert!(!RenderContext::resource_access_is_declared(
+            ResourceId::HDR,
+            ResourceAccess::ReadWrite,
+            &reads,
+            &[],
+        ));
+        assert!(!RenderContext::resource_access_is_declared(
+            ResourceId::HDR,
+            ResourceAccess::ReadWrite,
+            &[],
+            &writes,
+        ));
+        assert!(RenderContext::resource_access_is_declared(
+            ResourceId::HDR,
+            ResourceAccess::ReadWrite,
+            &reads,
+            &writes,
+        ));
+    }
+
+    #[test]
+    fn undeclared_resource_rejects_both_access_modes() {
+        for access in [ResourceAccess::Read, ResourceAccess::Write] {
+            assert!(!RenderContext::resource_access_is_declared(
+                ResourceId::DEPTH,
+                access,
+                &[ResourceId::HDR],
+                &[ResourceId::ENTITY],
+            ));
+        }
     }
 }
