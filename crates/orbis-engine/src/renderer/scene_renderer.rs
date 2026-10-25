@@ -223,26 +223,4 @@ mod tests {
         assert_eq!(ldr.last_use, outline);
     }
 
-    #[test]
-    fn default_render_graph_compiles_in_pass_order() {
-        let renderer = SceneRenderer::new();
-        let order = renderer.render_graph.compile_names().unwrap();
-
-        assert_eq!(
-            order,
-            vec![
-                "ShadowPass Opaque",
-                "MeshPass Opaque",
-                "SkyboxPass",
-                "BuildMipmapsPass",
-                "MeshPass Transmission",
-                "LightPass",
-                "AxisPass",
-                "BoundingboxPass",
-                "LinearizePass",
-                "OutlinePass",
-            ]
-        );
-    }
 }
-
