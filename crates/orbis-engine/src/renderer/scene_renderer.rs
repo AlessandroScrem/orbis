@@ -410,7 +410,7 @@ mod render_context_tests {
     }
 
     #[test]
-    fn framebuffer_view_access_rejects_undeclared_resource_before_lookup() {
+    fn framebuffer_view_access_rejects_undeclared_resource() {
         let result = std::panic::catch_unwind(|| {
             RenderContext::with_framebuffer_view(
                 FramebufferKind::Depth,
