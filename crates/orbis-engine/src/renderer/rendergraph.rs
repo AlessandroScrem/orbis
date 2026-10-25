@@ -1023,7 +1023,6 @@ mod tests {
         assert_eq!((ldr.first_use, ldr.last_use), (1, 1));
     }
 
-
     #[test]
     fn default_passes_declare_their_resource_contracts() {
         use crate::renderer::renderpass::{
