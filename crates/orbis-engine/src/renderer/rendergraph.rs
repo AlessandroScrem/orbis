@@ -1022,5 +1022,4 @@ mod tests {
             .unwrap();
         assert_eq!((ldr.first_use, ldr.last_use), (1, 1));
     }
-
 }
