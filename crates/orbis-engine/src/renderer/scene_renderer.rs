@@ -239,10 +239,9 @@ impl SceneRenderer {
         render_graph.add_pass(RenderPassEnum::Linearize(LinearizePass {}));
         render_graph.add_pass(RenderPassEnum::Outline(OutlinePass {}));
 
-        let compiled_graph = { 
-            let (order, lifetimes) = render_graph.compile_lifetimes().unwrap_or_default();
-            CompiledRenderGraph::new(order, lifetimes)
-        };
+        let compiled_graph = render_graph
+            .compile_persistent()
+            .expect("the default render graph must compile");
 
         Self {
             render_graph,
@@ -268,27 +267,21 @@ impl SceneRenderer {
         let pipeline_manager = runtime.pipeline_manager;
         let gpu_cache = runtime.gpu_cache;
 
-        let framebuffer_lifetimes = match self.render_graph.compile_lifetimes() {
-            Ok((_, lifetimes)) => lifetimes
-                .into_iter()
-                .filter_map(|lifetime| {
-                    let kind = match lifetime.resource {
-                        ResourceId::HDR => FramebufferKind::Hdr,
-                        ResourceId::OPAQUE => FramebufferKind::OpaqueWithMips,
-                        ResourceId::ENTITY => FramebufferKind::EntityId,
-                        ResourceId::DEPTH => FramebufferKind::Depth,
-                        ResourceId::LDR | ResourceId::PICKBUFFER | ResourceId::SHADOWMAP => {
-                            return None;
-                        }
-                    };
-                    Some((kind, lifetime.first_use, lifetime.last_use))
-                })
-                .collect::<Vec<_>>(),
-            Err(error) => {
-                log::error!("Render graph compilation failed; frame rendering skipped: {error}");
-                return;
-            }
-        };
+        let framebuffer_lifetimes = self
+            .compiled_graph
+            .lifetimes()
+            .iter()
+            .filter_map(|lifetime| {
+                let kind = match lifetime.resource {
+                    ResourceId::HDR => FramebufferKind::Hdr,
+                    ResourceId::OPAQUE => FramebufferKind::OpaqueWithMips,
+                    ResourceId::ENTITY => FramebufferKind::EntityId,
+                    ResourceId::DEPTH => FramebufferKind::Depth,
+                    ResourceId::LDR | ResourceId::PICKBUFFER | ResourceId::SHADOWMAP => return None,
+                };
+                Some((kind, lifetime.first_use, lifetime.last_use))
+            })
+            .collect::<Vec<_>>();
         gpu_manager.prepare_transient_frame(&gpu_context.as_ref(), &framebuffer_lifetimes);
 
         let mut ctx = RenderContext {
@@ -302,10 +295,8 @@ impl SceneRenderer {
             active_pass_writes: Vec::new(),
         };
 
-        if let Err(error) = self.render_graph.execute(encoder, &mut ctx, frame) {
-            log::error!("Render graph compilation failed; frame rendering skipped: {error}");
-            return;
-        }
+        self.render_graph
+            .execute(&self.compiled_graph, encoder, &mut ctx, frame);
 
         self.stats = FrameStats {
             opaque: frame.opaque_stats,
