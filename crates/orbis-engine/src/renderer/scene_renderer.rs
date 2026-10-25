@@ -17,25 +17,6 @@ pub struct SceneRenderContext<'a> {
     pub gpu_cache: &'a GpuCache,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ResourceAccess {
-    Read,
-    Write,
-    ReadWrite,
-}
-
-use std::fmt;
-impl fmt::Display for ResourceAccess {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = match *self {
-            Self::Read => "Read",
-            Self::Write => "Write",
-            Self::ReadWrite => "ReadWrite",
-        };
-        write!(f, "{}", name)
-    }
-}
-
 pub struct RenderContext<'a> {
     pub device: &'a Device,
     pub gpu_cache: &'a GpuCache,
@@ -50,7 +31,6 @@ impl RenderContext<'_> {
     pub(crate) fn framebuffer_attachement_view(
         &self,
         kind: FramebufferKind,
-        _access: ResourceAccess,
     ) -> &wgpu::TextureView {
         self.gpu_mgr.get_framebuffer_view(kind)
     }
@@ -67,7 +47,7 @@ impl RenderContext<'_> {
         self.gpu_mgr.get_framebuffer_bg(kind)
     }
 
-    pub(crate) fn pbr_map_bind_group(&self, _config_mode: MeshPassMode) -> &wgpu::BindGroup {
+    pub(crate) fn pbr_map_bind_group(&self) -> &wgpu::BindGroup {
         self.gpu_mgr.get_bindgroup(BindgroupKind::PbrMap)
     }
 
@@ -82,7 +62,7 @@ impl RenderContext<'_> {
     pub(crate) fn bindgroup(&self, kind: BindgroupKind) -> &wgpu::BindGroup {
         assert!(
             !matches!(kind, BindgroupKind::PbrMap),
-            "PbrMap bind group must use a resource-aware accessor"
+            "PbrMap bind group must use the dedicated accessor"
         );
 
         self.gpu_mgr.get_bindgroup(kind)
