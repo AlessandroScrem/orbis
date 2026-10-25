@@ -71,13 +71,6 @@ fn default_passes_declare_their_resource_contracts() {
         assert_eq!(pass.name(), *name, "pass name changed");
         assert_eq!(pass.reads(), *reads, "{name}: read declaration changed");
         assert_eq!(pass.writes(), *writes, "{name}: write declaration changed");
-
-        for resource in pass.reads() {
-            assert!(
-                !pass.writes().contains(resource) || pass.reads().contains(resource),
-                "{name}: inconsistent read/write declaration for {resource}"
-            );
-        }
     }
 }
 
