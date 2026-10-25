@@ -17,7 +17,7 @@ pub struct SceneRenderContext<'a> {
     pub gpu_cache: &'a GpuCache,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResourceAccess {
     Read,
     Write,

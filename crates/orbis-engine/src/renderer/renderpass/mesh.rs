@@ -23,19 +23,22 @@ pub struct MeshPass {
 }
 
 impl MeshPass {
+    const HDR_CLEAR: wgpu::Color = wgpu::Color {
+        r: 0.1,
+        g: 0.2,
+        b: 0.3,
+        a: 1.0,
+    };
+    const ENTITY_CLEAR: wgpu::Color = wgpu::Color::BLACK;
+    const DEPTH_CLEAR: f32 = 1.0;
+
     pub fn opaque() -> Self {
-        let clear_color = wgpu::Color {
-            r: 0.1,
-            g: 0.2,
-            b: 0.3,
-            a: 1.0,
-        };
         Self {
             config: MeshPassConfig {
                 mode: MeshPassMode::Opaque,
-                hdr_load: wgpu::LoadOp::Clear(clear_color),
-                entity_load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                depth_load: wgpu::LoadOp::Clear(1.0),
+                hdr_load: wgpu::LoadOp::Clear(Self::HDR_CLEAR),
+                entity_load: wgpu::LoadOp::Clear(Self::ENTITY_CLEAR),
+                depth_load: wgpu::LoadOp::Clear(Self::DEPTH_CLEAR),
                 hdr_access: ResourceAccess::Write,
                 entity_access: ResourceAccess::Write,
                 depth_access: ResourceAccess::Write,
@@ -206,8 +209,8 @@ mod tests {
     //Test single passes.
     #[test]
     fn mesh_passes_declare_expected_resource_access() {
-        let opaque_pass = RenderPassEnum::Mesh(MeshPass::opaque());
-        
+        let opaque_pass = MeshPass::opaque();
+
         assert_eq!(opaque_pass.reads(), &[ResourceId::SHADOWMAP]);
         assert_eq!(
             opaque_pass.writes(),
@@ -229,5 +232,51 @@ mod tests {
             transmission_pass.writes(),
             &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH]
         );
+    }
+
+    #[test]
+    fn opaque_pass_clears_attachments_and_uses_write_access() {
+        let pass = MeshPass::opaque();
+        let config = &pass.config;
+
+        assert_eq!(config.hdr_access, ResourceAccess::Write);
+        assert_eq!(config.entity_access, ResourceAccess::Write);
+        assert_eq!(config.depth_access, ResourceAccess::Write);
+
+        assert!(matches!(
+            &config.hdr_load,
+            wgpu::LoadOp::Clear(MeshPass::HDR_CLEAR)
+        ));
+        assert!(matches!(
+            &config.entity_load,
+            wgpu::LoadOp::Clear(MeshPass::ENTITY_CLEAR)
+        ));
+        assert!(matches!(
+            &config.depth_load,
+            wgpu::LoadOp::Clear(MeshPass::DEPTH_CLEAR)
+        ));
+    }
+
+    #[test]
+    fn transmission_pass_clears_attachments_and_uses_write_access() {
+        let pass = MeshPass::transmission();
+        let config = &pass.config;
+
+        assert_eq!(config.hdr_access, ResourceAccess::ReadWrite);
+        assert_eq!(config.entity_access, ResourceAccess::ReadWrite);
+        assert_eq!(config.depth_access, ResourceAccess::ReadWrite);
+
+        assert!(matches!(
+            &config.hdr_load,
+            wgpu::LoadOp::Load
+        ));
+        assert!(matches!(
+            &config.entity_load,
+            wgpu::LoadOp::Load
+        ));
+        assert!(matches!(
+            &config.depth_load,
+            wgpu::LoadOp::Load
+        ));
     }
 }
