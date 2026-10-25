@@ -258,7 +258,7 @@ mod tests {
     }
 
     #[test]
-    fn transmission_pass_clears_attachments_and_uses_write_access() {
+    fn transmission_pass_loads_attachments_and_uses_readwrite_access() {
         let pass = MeshPass::transmission();
         let config = &pass.config;
 
