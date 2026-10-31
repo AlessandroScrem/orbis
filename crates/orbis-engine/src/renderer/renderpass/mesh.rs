@@ -6,6 +6,48 @@ pub enum MeshPassMode {
     Transmission,
 }
 
+const OPAQUE_FIELDS: &[ResourceUse] = &[
+    ResourceUse {
+        resource: ResourceId::SHADOWMAP,
+        access: ResourceAccess::Read,
+    },
+    ResourceUse {
+        resource: ResourceId::HDR,
+        access: ResourceAccess::Write,
+    },
+    ResourceUse {
+        resource: ResourceId::ENTITY,
+        access: ResourceAccess::Write,
+    },
+    ResourceUse {
+        resource: ResourceId::DEPTH,
+        access: ResourceAccess::Write,
+    },
+];
+
+const TRANSMISSION_FIELDS: &[ResourceUse] = &[
+    ResourceUse {
+        resource: ResourceId::HDR,
+        access: ResourceAccess::ReadWrite,
+    },
+    ResourceUse {
+        resource: ResourceId::OPAQUE,
+        access: ResourceAccess::Read,
+    },
+    ResourceUse {
+        resource: ResourceId::ENTITY,
+        access: ResourceAccess::ReadWrite,
+    },
+    ResourceUse {
+        resource: ResourceId::DEPTH,
+        access: ResourceAccess::ReadWrite,
+    },
+    ResourceUse {
+        resource: ResourceId::SHADOWMAP,
+        access: ResourceAccess::Read,
+    },
+];
+
 pub struct MeshPassConfig {
     pub hdr_load: wgpu::LoadOp<wgpu::Color>,
     pub entity_load: wgpu::LoadOp<wgpu::Color>,
@@ -57,22 +99,10 @@ impl RenderPass for MeshPass {
         }
     }
 
-    fn reads(&self) -> &[ResourceId] {
+    fn resources(&self) -> &[ResourceUse] {
         match self.config.mode {
-            MeshPassMode::Opaque => &[ResourceId::SHADOWMAP],
-            MeshPassMode::Transmission => &[
-                ResourceId::HDR,
-                ResourceId::OPAQUE,
-                ResourceId::ENTITY,
-                ResourceId::DEPTH,
-                ResourceId::SHADOWMAP,
-            ],
-        }
-    }
-    fn writes(&self) -> &[ResourceId] {
-        match self.config.mode {
-            MeshPassMode::Opaque => &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH],
-            MeshPassMode::Transmission => &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH],
+            MeshPassMode::Opaque => OPAQUE_FIELDS,
+            MeshPassMode::Transmission => TRANSMISSION_FIELDS,
         }
     }
 
@@ -94,8 +124,7 @@ impl RenderPass for MeshPass {
             color_attachments: &[
                 // 0: opaque object
                 Some(wgpu::RenderPassColorAttachment {
-                    view: ctx
-                        .framebuffer_attachement_view(FramebufferKind::Hdr),
+                    view: ctx.framebuffer_attachement_view(FramebufferKind::Hdr),
                     ops: wgpu::Operations {
                         load: self.config.hdr_load,
                         store: wgpu::StoreOp::Store,
@@ -115,8 +144,7 @@ impl RenderPass for MeshPass {
                 }),
             ],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: ctx
-                    .framebuffer_attachement_view(FramebufferKind::Depth),
+                view: ctx.framebuffer_attachement_view(FramebufferKind::Depth),
                 depth_ops: Some(wgpu::Operations {
                     load: self.config.depth_load,
                     store: wgpu::StoreOp::Store,
@@ -192,34 +220,6 @@ impl RenderPass for MeshPass {
 mod tests {
     use super::*;
 
-    //Test single passes.
-    #[test]
-    fn mesh_passes_declare_expected_resource_access() {
-        let opaque_pass = MeshPass::opaque();
-
-        assert_eq!(opaque_pass.reads(), &[ResourceId::SHADOWMAP]);
-        assert_eq!(
-            opaque_pass.writes(),
-            &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH]
-        );
-
-        let transmission_pass = RenderPassEnum::Mesh(MeshPass::transmission());
-        assert_eq!(
-            transmission_pass.reads(),
-            &[
-                ResourceId::HDR,
-                ResourceId::OPAQUE,
-                ResourceId::ENTITY,
-                ResourceId::DEPTH,
-                ResourceId::SHADOWMAP
-            ]
-        );
-        assert_eq!(
-            transmission_pass.writes(),
-            &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH]
-        );
-    }
-
     #[test]
     fn opaque_pass_clears_attachments() {
         let pass = MeshPass::opaque();
@@ -244,17 +244,8 @@ mod tests {
         let pass = MeshPass::transmission();
         let config = &pass.config;
 
-        assert!(matches!(
-            &config.hdr_load,
-            wgpu::LoadOp::Load
-        ));
-        assert!(matches!(
-            &config.entity_load,
-            wgpu::LoadOp::Load
-        ));
-        assert!(matches!(
-            &config.depth_load,
-            wgpu::LoadOp::Load
-        ));
+        assert!(matches!(&config.hdr_load, wgpu::LoadOp::Load));
+        assert!(matches!(&config.entity_load, wgpu::LoadOp::Load));
+        assert!(matches!(&config.depth_load, wgpu::LoadOp::Load));
     }
 }

@@ -62,8 +62,8 @@ pub(super) enum ResourceAccess {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct ResourceUse {
-    resource: ResourceId,
-    access: ResourceAccess,
+    pub(super) resource: ResourceId,
+    pub(super) access: ResourceAccess,
 }
 
 #[derive(Clone, Copy)]

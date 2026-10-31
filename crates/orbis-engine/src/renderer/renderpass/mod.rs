@@ -25,7 +25,7 @@ use crate::renderer::scene_renderer::RenderContext;
 use crate::gpu::caches::*;
 use wgpu::IndexFormat;
 
-use super::rendergraph::ResourceUse;
+use super::rendergraph::{ResourceUse, ResourceId, ResourceAccess};
 use crate::assets::MaterialId;
 
 pub(crate) trait RenderPass {
