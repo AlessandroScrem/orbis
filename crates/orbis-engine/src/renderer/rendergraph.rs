@@ -53,6 +53,19 @@ impl ResourceId {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ResourceAccess {
+    Read,
+    Write,
+    ReadWrite,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ResourceUse {
+    resource: ResourceId,
+    access: ResourceAccess,
+}
+
 #[derive(Clone, Copy)]
 enum VisitState {
     NotVisited,
@@ -977,5 +990,40 @@ mod tests {
             .find(|item| item.resource == ResourceId::LDR)
             .unwrap();
         assert_eq!((ldr.first_use, ldr.last_use), (1, 1));
+    }
+
+    #[test]
+    fn should_resource_use_diffent_access() {
+        let read = ResourceUse {
+            resource: ResourceId::HDR,
+            access: ResourceAccess::Read,
+        };
+        let write = ResourceUse {
+            resource: ResourceId::HDR,
+            access: ResourceAccess::Write,
+        };
+        let read_write = ResourceUse {
+            resource: ResourceId::HDR,
+            access: ResourceAccess::ReadWrite,
+        };
+
+        assert!(read.access == ResourceAccess::Read);
+        assert!(write.access == ResourceAccess::Write);
+        assert!(read_write.access == ResourceAccess::ReadWrite);
+    }
+
+    #[test]
+    fn resource_use_preserves_resource_id() {
+        let hdr = ResourceUse {
+            resource: ResourceId::HDR,
+            access: ResourceAccess::Read,
+        };
+
+        let depth = ResourceUse {
+            resource: ResourceId::DEPTH,
+            access: ResourceAccess::Read,
+        };
+
+        assert_ne!(hdr, depth);
     }
 }
