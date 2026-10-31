@@ -25,14 +25,13 @@ use crate::renderer::scene_renderer::RenderContext;
 use crate::gpu::caches::*;
 use wgpu::IndexFormat;
 
-use super::rendergraph::ResourceId;
+use super::rendergraph::ResourceUse;
 use crate::assets::MaterialId;
 
 pub(crate) trait RenderPass {
     #[allow(dead_code)]
     fn name(&self) -> &'static str;
-    fn reads(&self) -> &[ResourceId];
-    fn writes(&self) -> &[ResourceId];
+    fn resources(&self) -> &[ResourceUse];
 
     fn execute(
         &mut self,
@@ -78,13 +77,10 @@ impl RenderPass for RenderPassEnum {
         impl_render_pass_enum!(self, name)
     }
 
-    fn reads(&self) -> &[ResourceId] {
-        impl_render_pass_enum!(self, reads)
+    fn resources(&self) -> &[ResourceUse] {
+        impl_render_pass_enum!(self, resources)
     }
 
-    fn writes(&self) -> &[ResourceId] {
-        impl_render_pass_enum!(self, writes)
-    }
 
     fn execute(
         &mut self,

@@ -54,14 +54,14 @@ impl ResourceId {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ResourceAccess {
+pub(super) enum ResourceAccess {
     Read,
     Write,
     ReadWrite,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct ResourceUse {
+pub(super) struct ResourceUse {
     resource: ResourceId,
     access: ResourceAccess,
 }
