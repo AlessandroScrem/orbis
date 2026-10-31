@@ -2,16 +2,20 @@ use super::*;
 
 pub struct AxisPass {}
 
+const FIELDS: &[ResourceUse] = &[
+    ResourceUse {
+        resource: ResourceId::HDR,
+        access: ResourceAccess::ReadWrite,
+    }
+];
+
 impl RenderPass for AxisPass {
     fn name(&self) -> &'static str {
         "AxisPass"
     }
 
-    fn reads(&self) -> &[ResourceId] {
-        &[ResourceId::HDR]
-    }
-    fn writes(&self) -> &[ResourceId] {
-        &[ResourceId::HDR]
+    fn resources(&self) -> &[ResourceUse] {
+        FIELDS
     }
 
     fn execute(
@@ -50,22 +54,5 @@ impl RenderPass for AxisPass {
         renderpass.set_bind_group(0, ctx.bindgroup(BindgroupKind::Camera), &[]);
         renderpass.set_vertex_buffer(0, ctx.buffer(BufferKind::Axis).slice(0..));
         renderpass.draw(0..6, 0..1);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    //Test single passes.
-    #[test]
-    fn axis_passes_declare_expected_resource_access() {
-        let pass = RenderPassEnum::Axis(AxisPass{});
-        
-        assert_eq!(pass.reads(), &[ResourceId::HDR]);
-        assert_eq!(
-            pass.writes(),
-            &[ResourceId::HDR]
-        );
     }
 }

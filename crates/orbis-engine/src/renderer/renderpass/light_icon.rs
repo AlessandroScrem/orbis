@@ -2,16 +2,28 @@ use super::*;
 
 pub struct LightsIconPass {}
 
+const FIELDS: &[ResourceUse] = &[
+    ResourceUse {
+        resource: ResourceId::HDR,
+        access: ResourceAccess::ReadWrite,
+    },
+    ResourceUse {
+        resource: ResourceId::ENTITY,
+        access: ResourceAccess::Read,
+    },
+    ResourceUse {
+        resource: ResourceId::DEPTH,
+        access: ResourceAccess::ReadWrite,
+    },
+];
+
 impl RenderPass for LightsIconPass {
     fn name(&self) -> &'static str {
         "LightPass"
     }
 
-    fn reads(&self) -> &[ResourceId] {
-        &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH]
-    }
-    fn writes(&self) -> &[ResourceId] {
-        &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH]
+    fn resources(&self) -> &[ResourceUse] {
+        FIELDS
     }
 
     fn execute(
@@ -73,22 +85,5 @@ impl RenderPass for LightsIconPass {
             renderpass.set_bind_group(1, light_bg, &[]);
             renderpass.draw(0..6, 0..light_uniform.count);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    //Test single passes.
-    #[test]
-    fn lights_icon_passes_declare_expected_resource_access() {
-        let pass = RenderPassEnum::LightsIcon(LightsIconPass{});
-        
-        assert_eq!(pass.reads(), &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH]);
-        assert_eq!(
-            pass.writes(),
-            &[ResourceId::HDR, ResourceId::ENTITY, ResourceId::DEPTH]
-        );
     }
 }

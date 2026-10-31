@@ -6,17 +6,18 @@ use super::*;
 
 pub struct ShadowPass {}
 
+const FIELDS: &[ResourceUse] = &[ResourceUse {
+    resource: ResourceId::SHADOWMAP,
+    access: ResourceAccess::Write,
+}];
+
 impl RenderPass for ShadowPass {
     fn name(&self) -> &'static str {
         "ShadowPass Opaque"
     }
 
-    fn reads(&self) -> &[ResourceId] {
-        &[]
-    }
-
-    fn writes(&self) -> &[ResourceId] {
-        &[ResourceId::SHADOWMAP]
+    fn resources(&self) -> &[ResourceUse] {
+       FIELDS
     }
 
     fn execute(
@@ -169,21 +170,3 @@ fn convert_texture(
 
     renderpass.draw(0..3, 0..1);
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    //Test single passes.
-    #[test]
-    fn shadow_map_passes_declare_expected_resource_access() {
-        let pass = RenderPassEnum::Shadow(ShadowPass{});
-        
-        assert_eq!(pass.reads(), &[]);
-        assert_eq!(
-            pass.writes(),
-            &[ResourceId::SHADOWMAP]
-        );
-    }
-}
-

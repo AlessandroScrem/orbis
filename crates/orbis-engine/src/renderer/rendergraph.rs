@@ -53,6 +53,19 @@ impl ResourceId {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ResourceAccess {
+    Read,
+    Write,
+    ReadWrite,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct ResourceUse {
+    pub(super) resource: ResourceId,
+    pub(super) access: ResourceAccess,
+}
+
 #[derive(Clone, Copy)]
 enum VisitState {
     NotVisited,
@@ -73,8 +86,7 @@ struct ResourceNode {
 
 struct PassNode<'a> {
     pass: &'a dyn RenderPass,
-    reads: Vec<ResourceId>,
-    writes: Vec<ResourceId>,
+    resources: Vec<ResourceUse>,
 }
 
 #[derive(Clone, Copy)]
@@ -167,32 +179,31 @@ impl RenderGraph {
             .iter()
             .map(|p| PassNode {
                 pass: p.as_ref(),
-                reads: p.reads().to_vec(),
-                writes: p.writes().to_vec(),
+                resources: p.resources().to_vec(),
             })
             .collect();
 
         for (i, pass) in pass_nodes.iter().enumerate() {
-            // writes
-            for &res in &pass.writes {
-                let entry = resources.entry(res).or_insert(ResourceNode {
-                    id: res,
-                    writers: Vec::new(),
-                    readers: Vec::new(),
-                });
-
-                entry.writers.push(i);
-            }
-
-            // reads
-            for &res in &pass.reads {
-                let entry = resources.entry(res).or_insert(ResourceNode {
-                    id: res,
-                    writers: Vec::new(),
-                    readers: Vec::new(),
-                });
-
-                entry.readers.push(i);
+            for resource_use in &pass.resources {
+                let entry = resources
+                    .entry(resource_use.resource)
+                    .or_insert(ResourceNode {
+                        id: resource_use.resource,
+                        writers: Vec::new(),
+                        readers: Vec::new(),
+                    });
+                match resource_use.access {
+                    ResourceAccess::Read => {
+                        entry.readers.push(i);
+                    }
+                    ResourceAccess::Write => {
+                        entry.writers.push(i);
+                    }
+                    ResourceAccess::ReadWrite => {
+                        entry.readers.push(i);
+                        entry.writers.push(i);
+                    }
+                }
             }
         }
 
@@ -548,12 +559,8 @@ mod tests {
                 "Writer"
             }
 
-            fn reads(&self) -> &[ResourceId] {
-                &[]
-            }
-
-            fn writes(&self) -> &[ResourceId] {
-                &[ResourceId::HDR]
+            fn resources(&self) -> &[ResourceUse] {
+                &[ResourceUse {resource: ResourceId::HDR, access: ResourceAccess::Write}]
             }
         }
 
@@ -562,12 +569,8 @@ mod tests {
                 "Reader"
             }
 
-            fn reads(&self) -> &[ResourceId] {
-                &[ResourceId::HDR]
-            }
-
-            fn writes(&self) -> &[ResourceId] {
-                &[]
+            fn resources(&self) -> &[ResourceUse] {
+                &[ResourceUse {resource: ResourceId::HDR, access: ResourceAccess::Read}]
             }
         }
 
@@ -595,12 +598,8 @@ mod tests {
                 self.1
             }
 
-            fn reads(&self) -> &[ResourceId] {
-                &[]
-            }
-
-            fn writes(&self) -> &[ResourceId] {
-                std::slice::from_ref(&self.0)
+            fn resources(&self) -> &[ResourceUse] {
+                &[ResourceUse {resource: &std::slice::from_ref(&self.0), access: ResourceAccess::Write}]
             }
         }
 
@@ -609,12 +608,8 @@ mod tests {
                 self.1
             }
 
-            fn reads(&self) -> &[ResourceId] {
-                std::slice::from_ref(&self.0)
-            }
-
-            fn writes(&self) -> &[ResourceId] {
-                &[]
+            fn resources(&self) -> &[ResourceUse] {
+                std::slice::from_ref(&ResourceUse {resource: (self.0), access: ResourceAccess::Read})
             }
         }
 
@@ -977,5 +972,40 @@ mod tests {
             .find(|item| item.resource == ResourceId::LDR)
             .unwrap();
         assert_eq!((ldr.first_use, ldr.last_use), (1, 1));
+    }
+
+    #[test]
+    fn should_resource_use_diffent_access() {
+        let read = ResourceUse {
+            resource: ResourceId::HDR,
+            access: ResourceAccess::Read,
+        };
+        let write = ResourceUse {
+            resource: ResourceId::HDR,
+            access: ResourceAccess::Write,
+        };
+        let read_write = ResourceUse {
+            resource: ResourceId::HDR,
+            access: ResourceAccess::ReadWrite,
+        };
+
+        assert!(read.access == ResourceAccess::Read);
+        assert!(write.access == ResourceAccess::Write);
+        assert!(read_write.access == ResourceAccess::ReadWrite);
+    }
+
+    #[test]
+    fn resource_use_preserves_resource_id() {
+        let hdr = ResourceUse {
+            resource: ResourceId::HDR,
+            access: ResourceAccess::Read,
+        };
+
+        let depth = ResourceUse {
+            resource: ResourceId::DEPTH,
+            access: ResourceAccess::Read,
+        };
+
+        assert_ne!(hdr, depth);
     }
 }
