@@ -528,6 +528,7 @@ mod tests {
     fn has_dependency(
         graph: &RenderGraph,
         dependencies: &[Vec<Edge>],
+        resource: ResourceId,
         dependent: &str,
         prerequisite: &str,
         kind: EdgeKind,
@@ -541,7 +542,7 @@ mod tests {
 
         dependencies[dependent]
             .iter()
-            .any(|edge| edge.to == prerequisite && edge.kind == kind)
+            .any(|edge| edge.to == prerequisite && edge.resource == resource &&  edge.kind == kind)
     }
 
     #[test]
@@ -1010,6 +1011,7 @@ mod tests {
         assert!(has_dependency(
             &graph,
             &dependencies,
+            ResourceId::HDR,
             "ReadWrite",
             "Writer",
             EdgeKind::ReadAfterWrite
@@ -1050,6 +1052,7 @@ mod tests {
         assert!(has_dependency(
             &graph,
             &dependencies,
+            ResourceId::HDR,
             "ReadWrite",
             "FirstWriter",
             EdgeKind::ReadAfterWrite
@@ -1057,6 +1060,7 @@ mod tests {
         assert!(has_dependency(
             &graph,
             &dependencies,
+            ResourceId::HDR,
             "SecondWriter",
             "ReadWrite",
             EdgeKind::WriterOrder
@@ -1100,6 +1104,7 @@ mod tests {
         assert!(has_dependency(
             &graph,
             &dependencies,
+            ResourceId::HDR,
             "ReadWrite",
             "Writer",
             EdgeKind::ReadAfterWrite
@@ -1108,6 +1113,7 @@ mod tests {
         assert!(has_dependency(
             &graph,
             &dependencies,
+            ResourceId::HDR,
             "Reader",
             "ReadWrite",
             EdgeKind::ReadAfterWrite
@@ -1159,6 +1165,7 @@ mod tests {
         assert!(has_dependency(
             &graph,
             &dependencies,
+            ResourceId::HDR,
             "ReadWrite",
             "FirstWriter",
             EdgeKind::ReadAfterWrite,
@@ -1168,6 +1175,7 @@ mod tests {
         assert!(has_dependency(
             &graph,
             &dependencies,
+            ResourceId::HDR,
             "SecondWriter",
             "ReadWrite",
             EdgeKind::WriterOrder,
@@ -1178,6 +1186,7 @@ mod tests {
         assert!(has_dependency(
             &graph,
             &dependencies,
+            ResourceId::HDR,
             "SecondWriter",
             "Reader",
             EdgeKind::WriteAfterRead,
