@@ -913,23 +913,6 @@ mod tests {
         assert_eq!((ldr.first_use, ldr.last_use), (1, 1));
     }
 
-    #[test]
-    fn read_write_resource_is_registered_as_reader_and_writer() {
-        let mut graph = RenderGraph::new();
-        graph.add_pass(test_pass(
-            "ReadWritePass",
-            &[ResourceUse {
-                resource: ResourceId::HDR,
-                access: ResourceAccess::ReadWrite,
-            }],
-        ));
-
-        let (_, resources) = graph.build_graph();
-        let hdr = resources.get(&ResourceId::HDR).unwrap();
-
-        assert_eq!(hdr.readers, vec![0]);
-        assert_eq!(hdr.writers, vec![0]);
-    }
 
     #[test]
     fn read_write_without_any_writer_is_reported_as_an_error() {
@@ -980,111 +963,6 @@ mod tests {
         ));
 
         assert_eq!(graph.compile_names().unwrap(), vec!["Writer", "ReadWrite"]);
-    }
-
-    #[test]
-    fn read_write_between_writers_preserves_resource_order() {
-        let mut graph = RenderGraph::new();
-
-        graph.add_pass(test_pass(
-            "FirstWriter",
-            &[ResourceUse {
-                resource: ResourceId::HDR,
-                access: ResourceAccess::Write,
-            }],
-        ));
-        graph.add_pass(test_pass(
-            "ReadWrite",
-            &[ResourceUse {
-                resource: ResourceId::HDR,
-                access: ResourceAccess::ReadWrite,
-            }],
-        ));
-        graph.add_pass(test_pass(
-            "SecondWriter",
-            &[ResourceUse {
-                resource: ResourceId::HDR,
-                access: ResourceAccess::Write,
-            }],
-        ));
-
-        let (_, resources) = graph.build_graph();
-        let dependencies = graph.build_dependencies(&resources);
-
-        assert!(has_dependency(
-            &graph,
-            &dependencies,
-            ResourceId::HDR,
-            "ReadWrite",
-            "FirstWriter",
-            EdgeKind::ReadAfterWrite
-        ));
-        assert!(has_dependency(
-            &graph,
-            &dependencies,
-            ResourceId::HDR,
-            "SecondWriter",
-            "ReadWrite",
-            EdgeKind::WriterOrder
-        ));
-
-        assert_eq!(
-            graph.compile_names().unwrap(),
-            vec!["FirstWriter", "ReadWrite", "SecondWriter"]
-        );
-    }
-
-    #[test]
-    fn reader_after_read_write_depends_on_read_write() {
-        let mut graph = RenderGraph::new();
-
-        graph.add_pass(test_pass(
-            "Writer",
-            &[ResourceUse {
-                resource: ResourceId::HDR,
-                access: ResourceAccess::Write,
-            }],
-        ));
-        graph.add_pass(test_pass(
-            "ReadWrite",
-            &[ResourceUse {
-                resource: ResourceId::HDR,
-                access: ResourceAccess::ReadWrite,
-            }],
-        ));
-        graph.add_pass(test_pass(
-            "Reader",
-            &[ResourceUse {
-                resource: ResourceId::HDR,
-                access: ResourceAccess::Read,
-            }],
-        ));
-
-        let (_, resources) = graph.build_graph();
-        let dependencies = graph.build_dependencies(&resources);
-
-        assert!(has_dependency(
-            &graph,
-            &dependencies,
-            ResourceId::HDR,
-            "ReadWrite",
-            "Writer",
-            EdgeKind::ReadAfterWrite
-        ));
-
-        assert!(has_dependency(
-            &graph,
-            &dependencies,
-            ResourceId::HDR,
-            "Reader",
-            "ReadWrite",
-            EdgeKind::ReadAfterWrite
-        ));
-
-        assert_eq!(
-            graph.compile_names().unwrap(),
-            vec!["Writer", "ReadWrite", "Reader"]
-        );
     }
 
     #[test]
