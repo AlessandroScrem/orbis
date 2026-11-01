@@ -90,7 +90,7 @@ struct PassNode<'a> {
     resources: Vec<ResourceUse>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum EdgeKind {
     ReadAfterWrite,
     WriteAfterRead,
@@ -326,7 +326,13 @@ impl RenderGraph {
 
         if let Some(resource_name) = resources
             .values()
-            .filter(|resource| !resource.readers.is_empty() && resource.writers.is_empty())
+            .filter(|resource| {
+                !resource.readers.is_empty()
+                    && !resource
+                        .accesses
+                        .iter()
+                        .any(|(_, access)| *access == ResourceAccess::Write)
+            })
             .map(|resource| resource.id.to_string())
             .min()
         {
@@ -520,6 +526,25 @@ mod tests {
                 access,
             }],
         }
+    }
+
+    fn has_dependency(
+        graph: &RenderGraph,
+        dependencies: &[Vec<Edge>],
+        dependent: &str,
+        prerequisite: &str,
+        kind: EdgeKind,
+    ) -> bool {
+        let find_pass = |name: &str| graph.passes.iter().position(|pass| pass.name() == name);
+
+        let (Some(dependent), Some(prerequisite)) = (find_pass(dependent), find_pass(prerequisite))
+        else {
+            return false;
+        };
+
+        dependencies[dependent].iter().any(|edge| {
+            edge.to == prerequisite && edge.resource == ResourceId::HDR && edge.kind == kind
+        })
     }
 
     #[test]
@@ -1059,11 +1084,33 @@ mod tests {
     }
 
     #[test]
+    fn read_write_without_any_writer_is_reported_as_an_error() {
+        let mut graph = RenderGraph::new();
+
+        graph.add_pass(test_pass("ReadWrite", ResourceAccess::ReadWrite));
+
+        let error = graph.compile().unwrap_err();
+
+        assert!(error.contains("HDR is read but never written"));
+    }
+
+    #[test]
     fn read_write_resource_depends_on_writer() {
         let mut graph = RenderGraph::new();
 
         graph.add_pass(test_pass("ReadWrite", ResourceAccess::ReadWrite));
         graph.add_pass(test_pass("Writer", ResourceAccess::Write));
+
+        let (_, resources) = graph.build_graph();
+        let dependencies = graph.build_dependencies(&resources);
+
+        assert!(has_dependency(
+            &graph,
+            &dependencies,
+            "ReadWrite",
+            "Writer",
+            EdgeKind::ReadAfterWrite
+        ));
 
         assert_eq!(graph.compile_names().unwrap(), vec!["Writer", "ReadWrite"]);
     }
@@ -1075,6 +1122,24 @@ mod tests {
         graph.add_pass(test_pass("FirstWriter", ResourceAccess::Write));
         graph.add_pass(test_pass("ReadWrite", ResourceAccess::ReadWrite));
         graph.add_pass(test_pass("SecondWriter", ResourceAccess::Write));
+
+        let (_, resources) = graph.build_graph();
+        let dependencies = graph.build_dependencies(&resources);
+
+        assert!(has_dependency(
+            &graph,
+            &dependencies,
+            "ReadWrite",
+            "FirstWriter",
+            EdgeKind::ReadAfterWrite
+        ));
+        assert!(has_dependency(
+            &graph,
+            &dependencies,
+            "SecondWriter",
+            "ReadWrite",
+            EdgeKind::WriterOrder
+        ));
 
         assert_eq!(
             graph.compile_names().unwrap(),
@@ -1089,6 +1154,25 @@ mod tests {
         graph.add_pass(test_pass("Writer", ResourceAccess::Write));
         graph.add_pass(test_pass("ReadWrite", ResourceAccess::ReadWrite));
         graph.add_pass(test_pass("Reader", ResourceAccess::Read));
+
+        let (_, resources) = graph.build_graph();
+        let dependencies = graph.build_dependencies(&resources);
+
+        assert!(has_dependency(
+            &graph,
+            &dependencies,
+            "ReadWrite",
+            "Writer",
+            EdgeKind::ReadAfterWrite
+        ));
+
+        assert!(has_dependency(
+            &graph,
+            &dependencies,
+            "Reader",
+            "ReadWrite",
+            EdgeKind::ReadAfterWrite
+        ));
 
         assert_eq!(
             graph.compile_names().unwrap(),
@@ -1105,9 +1189,40 @@ mod tests {
         graph.add_pass(test_pass("Reader", ResourceAccess::Read));
         graph.add_pass(test_pass("SecondWriter", ResourceAccess::Write));
 
+        let (_, resources) = graph.build_graph();
+        let dependencies = graph.build_dependencies(&resources);
+
+        // ReadWrite deve leggere il valore prodotto da FirstWriter.
+        assert!(has_dependency(
+            &graph,
+            &dependencies,
+            "ReadWrite",
+            "FirstWriter",
+            EdgeKind::ReadAfterWrite,
+        ));
+
+        // SecondWriter deve attendere che ReadWrite abbia terminato.
+        assert!(has_dependency(
+            &graph,
+            &dependencies,
+            "SecondWriter",
+            "ReadWrite",
+            EdgeKind::WriterOrder,
+        ));
+
+        // SecondWriter non deve sovrascrivere la risorsa prima che Reader
+        // abbia terminato di leggerla.
+        assert!(has_dependency(
+            &graph,
+            &dependencies,
+            "SecondWriter",
+            "Reader",
+            EdgeKind::WriteAfterRead,
+        ));
+
         assert_eq!(
             graph.compile_names().unwrap(),
-            vec!["FirstWriter", "ReadWrite", "Reader", "SecondWriter",]
+            vec!["FirstWriter", "ReadWrite", "Reader", "SecondWriter"]
         );
     }
 }
