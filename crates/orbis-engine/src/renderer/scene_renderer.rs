@@ -28,10 +28,7 @@ pub struct RenderContext<'a> {
 }
 
 impl RenderContext<'_> {
-    pub(crate) fn framebuffer_attachement_view(
-        &self,
-        kind: FramebufferKind,
-    ) -> &wgpu::TextureView {
+    pub(crate) fn framebuffer_attachement_view(&self, kind: FramebufferKind) -> &wgpu::TextureView {
         self.gpu_mgr.get_framebuffer_view(kind)
     }
 
@@ -93,16 +90,16 @@ impl SceneRenderer {
         debug!("Renderer initialized in {} ms", timer.elapsed().as_millis());
 
         let mut render_graph = RenderGraph::new();
-        render_graph.add_pass(RenderPassEnum::Shadow(ShadowPass {}));
-        render_graph.add_pass(RenderPassEnum::Mesh(MeshPass::opaque()));
-        render_graph.add_pass(RenderPassEnum::Skybox(SkyboxPass {}));
-        render_graph.add_pass(RenderPassEnum::BuildMipmaps(BuildMipmapsPass {}));
-        render_graph.add_pass(RenderPassEnum::Transmission(MeshPass::transmission()));
-        render_graph.add_pass(RenderPassEnum::LightsIcon(LightsIconPass {}));
-        render_graph.add_pass(RenderPassEnum::Axis(AxisPass {}));
-        render_graph.add_pass(RenderPassEnum::Lines(LinesPass {}));
-        render_graph.add_pass(RenderPassEnum::Linearize(LinearizePass {}));
-        render_graph.add_pass(RenderPassEnum::Outline(OutlinePass {}));
+        render_graph.add_pass(ShadowPass {});
+        render_graph.add_pass(MeshPass::opaque());
+        render_graph.add_pass(SkyboxPass {});
+        render_graph.add_pass(BuildMipmapsPass {});
+        render_graph.add_pass(MeshPass::transmission());
+        render_graph.add_pass(LightsIconPass {});
+        render_graph.add_pass(AxisPass {});
+        render_graph.add_pass(LinesPass {});
+        render_graph.add_pass(LinearizePass {});
+        render_graph.add_pass(OutlinePass {});
 
         let compiled_graph = render_graph
             .compile_persistent()
@@ -142,7 +139,9 @@ impl SceneRenderer {
                     ResourceId::OPAQUE => FramebufferKind::OpaqueWithMips,
                     ResourceId::ENTITY => FramebufferKind::EntityId,
                     ResourceId::DEPTH => FramebufferKind::Depth,
-                    ResourceId::LDR | ResourceId::PICKBUFFER | ResourceId::SHADOWMAP => return None,
+                    ResourceId::LDR | ResourceId::PICKBUFFER | ResourceId::SHADOWMAP => {
+                        return None;
+                    }
                 };
                 Some((kind, lifetime.first_use, lifetime.last_use))
             })
@@ -167,4 +166,3 @@ impl SceneRenderer {
         };
     }
 }
-
