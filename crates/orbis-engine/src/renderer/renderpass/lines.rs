@@ -12,7 +12,7 @@ const FIELDS: &[ResourceUse] = &[
 
 impl RenderPass for LinesPass {
     fn name(&self) -> &'static str {
-        "BoundingboxPass"
+        "LinesPass"
     }
 
     fn resources(&self) -> &[ResourceUse] {
