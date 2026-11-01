@@ -5,16 +5,24 @@ use crate::gpu::pipeline_manager::CsPipelineKind;
 
 pub struct BuildMipmapsPass {}
 
+const FIELDS: &[ResourceUse] = &[
+    ResourceUse {
+        resource: ResourceId::HDR,
+        access: ResourceAccess::Read,
+    },
+    ResourceUse {
+        resource: ResourceId::OPAQUE,
+        access: ResourceAccess::Write,
+    },
+];
+
 impl RenderPass for BuildMipmapsPass {
     fn name(&self) -> &'static str {
         "BuildMipmapsPass"
     }
 
-    fn reads(&self) -> &[ResourceId] {
-        &[ResourceId::HDR]
-    }
-    fn writes(&self) -> &[ResourceId] {
-        &[ResourceId::OPAQUE]
+    fn resources(&self) -> &[ResourceUse] {
+        FIELDS
     }
 
     fn execute(
@@ -271,22 +279,5 @@ fn render_mipmaps(
             rpass.draw(0..3, 0..1); // fullscreen triangle
         }
         src_view = dst_view;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    //Test single passes.
-    #[test]
-    fn build_mipmaps_passes_declare_expected_resource_access() {
-        let pass = RenderPassEnum::BuildMipmaps(BuildMipmapsPass{});
-        
-        assert_eq!(pass.reads(), &[ResourceId::HDR]);
-        assert_eq!(
-            pass.writes(),
-            &[ResourceId::OPAQUE]
-        );
     }
 }

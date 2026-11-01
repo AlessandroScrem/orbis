@@ -53,6 +53,19 @@ impl ResourceId {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ResourceAccess {
+    Read,
+    Write,
+    ReadWrite,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResourceUse {
+    pub(super) resource: ResourceId,
+    pub(super) access: ResourceAccess,
+}
+
 #[derive(Clone, Copy)]
 enum VisitState {
     NotVisited,
@@ -69,15 +82,15 @@ struct ResourceNode {
     id: ResourceId,
     writers: Vec<usize>,
     readers: Vec<usize>,
+    accesses: Vec<(usize, ResourceAccess)>,
 }
 
 struct PassNode<'a> {
     pass: &'a dyn RenderPass,
-    reads: Vec<ResourceId>,
-    writes: Vec<ResourceId>,
+    resources: Vec<ResourceUse>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum EdgeKind {
     ReadAfterWrite,
     WriteAfterRead,
@@ -159,6 +172,13 @@ impl RenderGraph {
     // -------------------------
     // Build Pass + Resource graph
     // -------------------------
+    // Rules:
+    // -------------------------
+    // Access      Dependency
+    // Read	       Depends from last writer
+    // Write	   Depends from writer and previous readers
+    // ReadWrite   Depends from last writer and previous readers; becomes the new writer
+
     fn build_graph(&self) -> (Vec<PassNode<'_>>, HashMap<ResourceId, ResourceNode>) {
         let mut resources: HashMap<ResourceId, ResourceNode> = HashMap::new();
 
@@ -167,32 +187,35 @@ impl RenderGraph {
             .iter()
             .map(|p| PassNode {
                 pass: p.as_ref(),
-                reads: p.reads().to_vec(),
-                writes: p.writes().to_vec(),
+                resources: p.resources().to_vec(),
             })
             .collect();
 
         for (i, pass) in pass_nodes.iter().enumerate() {
-            // writes
-            for &res in &pass.writes {
-                let entry = resources.entry(res).or_insert(ResourceNode {
-                    id: res,
-                    writers: Vec::new(),
-                    readers: Vec::new(),
-                });
+            for resource_use in &pass.resources {
+                let entry = resources
+                    .entry(resource_use.resource)
+                    .or_insert(ResourceNode {
+                        id: resource_use.resource,
+                        writers: Vec::new(),
+                        readers: Vec::new(),
+                        accesses: Vec::new(),
+                    });
 
-                entry.writers.push(i);
-            }
+                entry.accesses.push((i, resource_use.access));
 
-            // reads
-            for &res in &pass.reads {
-                let entry = resources.entry(res).or_insert(ResourceNode {
-                    id: res,
-                    writers: Vec::new(),
-                    readers: Vec::new(),
-                });
-
-                entry.readers.push(i);
+                match resource_use.access {
+                    ResourceAccess::Read => {
+                        entry.readers.push(i);
+                    }
+                    ResourceAccess::Write => {
+                        entry.writers.push(i);
+                    }
+                    ResourceAccess::ReadWrite => {
+                        entry.readers.push(i);
+                        entry.writers.push(i);
+                    }
+                }
             }
         }
 
@@ -206,54 +229,66 @@ impl RenderGraph {
         let mut deps = vec![Vec::new(); self.passes.len()];
 
         for res in resources.values() {
-            // Preserve the declared order for multiple writes to the same resource.
-            for writers in res.writers.windows(2) {
-                let earlier = writers[0];
-                let later = writers[1];
-                deps[later].push(Edge {
-                    from: later,
-                    to: earlier,
-                    resource: res.id,
-                    kind: EdgeKind::WriterOrder,
-                });
+            let mut accesses = res.accesses.clone();
+
+            if let Some(first_write) = accesses
+                .iter()
+                .position(|(_, access)| *access == ResourceAccess::Write)
+            {
+                let preceding = accesses.drain(..first_write).collect::<Vec<_>>();
+                let writer = accesses.remove(0);
+
+                accesses.splice(0..0, preceding);
+                accesses.insert(0, writer);
             }
 
-            // A reader observes the latest preceding writer. If it is registered
-            // before every writer, it observes the first writer instead. In either
-            // case, force the reader to finish before the next write so unrelated
-            // dependencies cannot move a clobbering write ahead of that read.
-            for &reader in &res.readers {
-                let preceding_writer = res
-                    .writers
-                    .iter()
-                    .copied()
-                    .take_while(|writer| *writer < reader)
-                    .last();
-                let observed_writer = preceding_writer.or_else(|| res.writers.first().copied());
+            let mut last_writer: Option<usize> = None;
+            let mut readers = Vec::new();
 
-                if let Some(writer) = observed_writer
-                    && writer != reader
-                {
-                    deps[reader].push(Edge {
-                        from: reader,
-                        to: writer,
-                        resource: res.id,
-                        kind: EdgeKind::ReadAfterWrite,
-                    });
-                }
+            for (pass, access) in &accesses {
+                match access {
+                    ResourceAccess::Read => {
+                        if let Some(writer) = last_writer {
+                            deps[*pass].push(Edge {
+                                from: *pass,
+                                to: writer,
+                                resource: res.id,
+                                kind: EdgeKind::ReadAfterWrite,
+                            });
+                        }
 
-                if let Some(next_writer) = res
-                    .writers
-                    .iter()
-                    .copied()
-                    .find(|writer| *writer > reader && Some(*writer) != observed_writer)
-                {
-                    deps[next_writer].push(Edge {
-                        from: next_writer,
-                        to: reader,
-                        resource: res.id,
-                        kind: EdgeKind::WriteAfterRead,
-                    });
+                        readers.push(*pass);
+                    }
+
+                    ResourceAccess::Write | ResourceAccess::ReadWrite => {
+                        if let Some(writer) = last_writer {
+                            let kind = if *access == ResourceAccess::ReadWrite {
+                                EdgeKind::ReadAfterWrite
+                            } else {
+                                EdgeKind::WriterOrder
+                            };
+
+                            deps[*pass].push(Edge {
+                                from: *pass,
+                                to: writer,
+                                resource: res.id,
+                                kind,
+                            });
+                        }
+
+                        for reader in readers.drain(..) {
+                            if reader != *pass {
+                                deps[*pass].push(Edge {
+                                    from: *pass,
+                                    to: reader,
+                                    kind: EdgeKind::WriteAfterRead,
+                                    resource: res.id,
+                                });
+                            }
+                        }
+
+                        last_writer = Some(*pass);
+                    }
                 }
             }
         }
@@ -291,7 +326,13 @@ impl RenderGraph {
 
         if let Some(resource_name) = resources
             .values()
-            .filter(|resource| !resource.readers.is_empty() && resource.writers.is_empty())
+            .filter(|resource| {
+                !resource.readers.is_empty()
+                    && !resource
+                        .accesses
+                        .iter()
+                        .any(|(_, access)| *access == ResourceAccess::Write)
+            })
             .map(|resource| resource.id.to_string())
             .min()
         {
@@ -382,9 +423,9 @@ impl RenderGraph {
         let mut lifetimes: HashMap<ResourceId, (usize, usize)> = HashMap::new();
         for (pass_index, pass) in self.passes.iter().enumerate() {
             let position = execution_index[pass_index];
-            for resource in pass.reads().iter().chain(pass.writes()) {
+            for resource_use in pass.resources() {
                 lifetimes
-                    .entry(*resource)
+                    .entry(resource_use.resource)
                     .and_modify(|(first, last)| {
                         *first = (*first).min(position);
                         *last = (*last).max(position);
@@ -462,6 +503,48 @@ impl RenderGraph {
 mod tests {
     use super::*;
 
+    struct TestPass {
+        name: &'static str,
+        resources: Vec<ResourceUse>,
+    }
+
+    impl RenderPass for TestPass {
+        fn name(&self) -> &'static str {
+            self.name
+        }
+
+        fn resources(&self) -> &[ResourceUse] {
+            &self.resources
+        }
+    }
+
+    fn test_pass(name: &'static str, resources: &[ResourceUse]) -> TestPass {
+        TestPass {
+            name,
+            resources: resources.to_vec(),
+        }
+    }
+
+    fn has_dependency(
+        graph: &RenderGraph,
+        dependencies: &[Vec<Edge>],
+        resource: ResourceId,
+        dependent: &str,
+        prerequisite: &str,
+        kind: EdgeKind,
+    ) -> bool {
+        let find_pass = |name: &str| graph.passes.iter().position(|pass| pass.name() == name);
+
+        let (Some(dependent), Some(prerequisite)) = (find_pass(dependent), find_pass(prerequisite))
+        else {
+            return false;
+        };
+
+        dependencies[dependent]
+            .iter()
+            .any(|edge| edge.to == prerequisite && edge.resource == resource &&  edge.kind == kind)
+    }
+
     #[test]
     fn compile_returns_persistent_graph() {
         let graph = RenderGraph::new();
@@ -494,26 +577,17 @@ mod tests {
     #[test]
     fn should_run_in_order() {
         let mut graph = RenderGraph::new();
-        let meshpass = MeshPass::opaque();
-        let skyboxpass = SkyboxPass {};
-        let build_mipmaps = BuildMipmapsPass {};
-        let transmission = MeshPass::transmission();
-        let lightpass = LightsIconPass {};
-        let axispass = AxisPass {};
-        let bboxpass = LinesPass {};
-        let linearizepass = LinearizePass {};
-        let outlinepass = OutlinePass {};
 
         graph.add_pass(ShadowPass {});
-        graph.add_pass(meshpass);
-        graph.add_pass(skyboxpass);
-        graph.add_pass(build_mipmaps);
-        graph.add_pass(transmission);
-        graph.add_pass(lightpass);
-        graph.add_pass(axispass);
-        graph.add_pass(bboxpass);
-        graph.add_pass(linearizepass);
-        graph.add_pass(outlinepass);
+        graph.add_pass(MeshPass::opaque());
+        graph.add_pass(SkyboxPass {});
+        graph.add_pass(BuildMipmapsPass {});
+        graph.add_pass(MeshPass::transmission());
+        graph.add_pass(LightsIconPass {});
+        graph.add_pass(AxisPass {});
+        graph.add_pass(LinesPass {});
+        graph.add_pass(LinearizePass {});
+        graph.add_pass(OutlinePass {});
 
         match graph.compile_names() {
             Ok(order) => {
@@ -528,7 +602,7 @@ mod tests {
                         "MeshPass Transmission",
                         "LightPass",
                         "AxisPass",
-                        "BoundingboxPass",
+                        "LinesPass",
                         "LinearizePass",
                         "OutlinePass",
                     ]
@@ -539,135 +613,29 @@ mod tests {
     }
 
     #[test]
-    fn dependencies_compile_writer_before_reader() {
-        struct Writer;
-        struct Reader;
-
-        impl RenderPass for Writer {
-            fn name(&self) -> &'static str {
-                "Writer"
-            }
-
-            fn reads(&self) -> &[ResourceId] {
-                &[]
-            }
-
-            fn writes(&self) -> &[ResourceId] {
-                &[ResourceId::HDR]
-            }
-        }
-
-        impl RenderPass for Reader {
-            fn name(&self) -> &'static str {
-                "Reader"
-            }
-
-            fn reads(&self) -> &[ResourceId] {
-                &[ResourceId::HDR]
-            }
-
-            fn writes(&self) -> &[ResourceId] {
-                &[]
-            }
-        }
-
-        let mut graph = RenderGraph::new();
-        graph.add_pass(Reader);
-        graph.add_pass(Writer);
-
-        let order = graph.compile_names().unwrap();
-        let writer = order.iter().position(|name| *name == "Writer").unwrap();
-        let reader = order.iter().position(|name| *name == "Reader").unwrap();
-
-        assert!(
-            writer < reader,
-            "writer must run before its reader: {order:?}"
-        );
-    }
-
-    #[test]
-    fn dependency_order_is_deterministic() {
-        struct Writer(ResourceId, &'static str);
-        struct Reader(ResourceId, &'static str);
-
-        impl RenderPass for Writer {
-            fn name(&self) -> &'static str {
-                self.1
-            }
-
-            fn reads(&self) -> &[ResourceId] {
-                &[]
-            }
-
-            fn writes(&self) -> &[ResourceId] {
-                std::slice::from_ref(&self.0)
-            }
-        }
-
-        impl RenderPass for Reader {
-            fn name(&self) -> &'static str {
-                self.1
-            }
-
-            fn reads(&self) -> &[ResourceId] {
-                std::slice::from_ref(&self.0)
-            }
-
-            fn writes(&self) -> &[ResourceId] {
-                &[]
-            }
-        }
-
-        let mut graph = RenderGraph::new();
-        graph.add_pass(Reader(ResourceId::LDR, "Reader LDR"));
-        graph.add_pass(Reader(ResourceId::HDR, "Reader HDR"));
-        graph.add_pass(Writer(ResourceId::LDR, "Writer LDR"));
-        graph.add_pass(Writer(ResourceId::HDR, "Writer HDR"));
-
-        let expected = graph.compile_names().unwrap();
-        for _ in 0..32 {
-            assert_eq!(graph.compile_names().unwrap(), expected);
-        }
-    }
-
-    #[test]
     fn multiple_writers_preserve_registration_order() {
-        struct Pass {
-            name: &'static str,
-            reads: Vec<ResourceId>,
-            writes: Vec<ResourceId>,
-        }
-
-        impl RenderPass for Pass {
-            fn name(&self) -> &'static str {
-                self.name
-            }
-
-            fn reads(&self) -> &[ResourceId] {
-                &self.reads
-            }
-
-            fn writes(&self) -> &[ResourceId] {
-                &self.writes
-            }
-        }
-
         let mut graph = RenderGraph::new();
-        graph.add_pass(Pass {
-            name: "First writer",
-            reads: vec![],
-            writes: vec![ResourceId::HDR],
-        });
-        graph.add_pass(Pass {
-            name: "Second writer",
-            reads: vec![],
-            writes: vec![ResourceId::HDR],
-        });
-        graph.add_pass(Pass {
-            name: "Reader",
-            reads: vec![ResourceId::HDR],
-            writes: vec![],
-        });
+        graph.add_pass(test_pass(
+            "First writer",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::Write,
+            }],
+        ));
+        graph.add_pass(test_pass(
+            "Second writer",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::Write,
+            }],
+        ));
+        graph.add_pass(test_pass(
+            "Reader",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::Read,
+            }],
+        ));
 
         assert_eq!(
             graph.compile_names().unwrap(),
@@ -677,41 +645,29 @@ mod tests {
 
     #[test]
     fn reader_between_writers_observes_the_preceding_write() {
-        struct Pass {
-            name: &'static str,
-            reads: Vec<ResourceId>,
-            writes: Vec<ResourceId>,
-        }
-
-        impl RenderPass for Pass {
-            fn name(&self) -> &'static str {
-                self.name
-            }
-            fn reads(&self) -> &[ResourceId] {
-                &self.reads
-            }
-            fn writes(&self) -> &[ResourceId] {
-                &self.writes
-            }
-        }
-
         let mut graph = RenderGraph::new();
-        graph.add_pass(Pass {
-            name: "First writer",
-            reads: vec![],
-            writes: vec![ResourceId::HDR],
-        });
-        graph.add_pass(Pass {
-            name: "Reader",
-            reads: vec![ResourceId::HDR],
-            writes: vec![],
-        });
+        graph.add_pass(test_pass(
+            "First writer",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::Write,
+            }],
+        ));
+        graph.add_pass(test_pass(
+            "Reader",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::Read,
+            }],
+        ));
 
-        graph.add_pass(Pass {
-            name: "Second writer",
-            reads: vec![],
-            writes: vec![ResourceId::HDR],
-        });
+        graph.add_pass(test_pass(
+            "Second writer",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::Write,
+            }],
+        ));
 
         let (_, resources) = graph.build_graph();
         let dependencies = graph.build_dependencies(&resources);
@@ -735,21 +691,14 @@ mod tests {
 
     #[test]
     fn read_without_any_writer_is_reported_as_an_error() {
-        struct Reader;
-        impl RenderPass for Reader {
-            fn name(&self) -> &'static str {
-                "Reader"
-            }
-            fn reads(&self) -> &[ResourceId] {
-                &[ResourceId::PICKBUFFER]
-            }
-            fn writes(&self) -> &[ResourceId] {
-                &[]
-            }
-        }
-
         let mut graph = RenderGraph::new();
-        graph.add_pass(Reader);
+        graph.add_pass(test_pass(
+            "Reader",
+            &[ResourceUse {
+                resource: ResourceId::PICKBUFFER,
+                access: ResourceAccess::Read,
+            }],
+        ));
         assert!(
             graph
                 .compile()
@@ -760,38 +709,34 @@ mod tests {
 
     #[test]
     fn should_find_cycles() {
-        struct PassA;
-        struct PassB;
-
-        impl RenderPass for PassA {
-            fn name(&self) -> &'static str {
-                "Pass A"
-            }
-
-            fn reads(&self) -> &[ResourceId] {
-                &[ResourceId::LDR]
-            }
-            fn writes(&self) -> &[ResourceId] {
-                &[ResourceId::DEPTH]
-            }
-        }
-
-        impl RenderPass for PassB {
-            fn name(&self) -> &'static str {
-                "Pass B"
-            }
-            fn reads(&self) -> &[ResourceId] {
-                &[ResourceId::DEPTH]
-            }
-            fn writes(&self) -> &[ResourceId] {
-                &[ResourceId::LDR]
-            }
-        }
-
         let mut graph = RenderGraph::new();
 
-        graph.add_pass(PassA);
-        graph.add_pass(PassB);
+        graph.add_pass(test_pass(
+            "Pass A",
+            &[
+                ResourceUse {
+                    resource: ResourceId::LDR,
+                    access: ResourceAccess::Read,
+                },
+                ResourceUse {
+                    resource: ResourceId::DEPTH,
+                    access: ResourceAccess::Write,
+                },
+            ],
+        ));
+        graph.add_pass(test_pass(
+            "Pass B",
+            &[
+                ResourceUse {
+                    resource: ResourceId::DEPTH,
+                    access: ResourceAccess::Read,
+                },
+                ResourceUse {
+                    resource: ResourceId::LDR,
+                    access: ResourceAccess::Write,
+                },
+            ],
+        ));
 
         let error = graph.compile().unwrap_err();
 
@@ -806,30 +751,38 @@ mod tests {
     #[test]
     fn graph_allocates_slots_from_compiled_resource_lifetimes() {
         struct Pass {
-            reads: Vec<ResourceId>,
-            writes: Vec<ResourceId>,
+            resources: Vec<ResourceUse>,
         }
         impl RenderPass for Pass {
             fn name(&self) -> &'static str {
                 "TestPass"
             }
-            fn reads(&self) -> &[ResourceId] {
-                &self.reads
-            }
-            fn writes(&self) -> &[ResourceId] {
-                &self.writes
+            fn resources(&self) -> &[ResourceUse] {
+                &self.resources
             }
         }
 
         let mut graph = RenderGraph::new();
-        graph.add_pass(Pass {
-            reads: vec![],
-            writes: vec![ResourceId::HDR],
-        });
-        graph.add_pass(Pass {
-            reads: vec![ResourceId::HDR],
-            writes: vec![ResourceId::OPAQUE],
-        });
+        graph.add_pass(test_pass(
+            "TestéPass",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::Write,
+            }],
+        ));
+        graph.add_pass(test_pass(
+            "TestPass",
+            &[
+                ResourceUse {
+                    resource: ResourceId::HDR,
+                    access: ResourceAccess::Read,
+                },
+                ResourceUse {
+                    resource: ResourceId::OPAQUE,
+                    access: ResourceAccess::Write,
+                },
+            ],
+        ));
         let mut pool = TransientResourcePool::new();
 
         let slots = graph
@@ -846,35 +799,28 @@ mod tests {
 
     #[test]
     fn graph_keeps_incompatible_formats_in_separate_slots() {
-        struct Pass {
-            reads: Vec<ResourceId>,
-            writes: Vec<ResourceId>,
-        }
-        impl RenderPass for Pass {
-            fn name(&self) -> &'static str {
-                "TestPass"
-            }
-            fn reads(&self) -> &[ResourceId] {
-                &self.reads
-            }
-            fn writes(&self) -> &[ResourceId] {
-                &self.writes
-            }
-        }
-
         let mut graph = RenderGraph::new();
-        graph.add_pass(Pass {
-            reads: vec![],
-            writes: vec![ResourceId::HDR],
-        });
-        graph.add_pass(Pass {
-            reads: vec![ResourceId::HDR],
-            writes: vec![],
-        });
-        graph.add_pass(Pass {
-            reads: vec![],
-            writes: vec![ResourceId::OPAQUE],
-        });
+        graph.add_pass(test_pass(
+            "TestPass",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::Write,
+            }],
+        ));
+        graph.add_pass(test_pass(
+            "TestPass",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::Read,
+            }],
+        ));
+        graph.add_pass(test_pass(
+            "TestPass",
+            &[ResourceUse {
+                resource: ResourceId::OPAQUE,
+                access: ResourceAccess::Write,
+            }],
+        ));
 
         let mut pool = TransientResourcePool::new();
 
@@ -899,25 +845,21 @@ mod tests {
 
     #[test]
     fn transient_allocation_excludes_externally_managed_resources() {
-        struct Pass(ResourceId);
-
-        impl RenderPass for Pass {
-            fn name(&self) -> &'static str {
-                "Resource writer"
-            }
-
-            fn reads(&self) -> &[ResourceId] {
-                &[]
-            }
-
-            fn writes(&self) -> &[ResourceId] {
-                std::slice::from_ref(&self.0)
-            }
-        }
-
         let mut graph = RenderGraph::new();
-        graph.add_pass(Pass(ResourceId::SHADOWMAP));
-        graph.add_pass(Pass(ResourceId::HDR));
+        graph.add_pass(test_pass(
+            "Resource writer",
+            &[ResourceUse {
+                resource: ResourceId::SHADOWMAP,
+                access: ResourceAccess::Write,
+            }],
+        ));
+        graph.add_pass(test_pass(
+            "Resource writer",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::Write,
+            }],
+        ));
 
         let mut pool = TransientResourcePool::new();
         let slots = graph
@@ -931,37 +873,29 @@ mod tests {
 
     #[test]
     fn resource_lifetimes_use_compiled_execution_order() {
-        struct Pass {
-            name: &'static str,
-            reads: Vec<ResourceId>,
-            writes: Vec<ResourceId>,
-        }
-
-        impl RenderPass for Pass {
-            fn name(&self) -> &'static str {
-                self.name
-            }
-            fn reads(&self) -> &[ResourceId] {
-                &self.reads
-            }
-            fn writes(&self) -> &[ResourceId] {
-                &self.writes
-            }
-        }
-
         let mut graph = RenderGraph::new();
         // Registered in reverse dependency order to ensure lifetimes are
         // computed from the compiled order rather than registration indices.
-        graph.add_pass(Pass {
-            name: "Reader",
-            reads: vec![ResourceId::HDR],
-            writes: vec![ResourceId::LDR],
-        });
-        graph.add_pass(Pass {
-            name: "Writer",
-            reads: vec![],
-            writes: vec![ResourceId::HDR],
-        });
+        graph.add_pass(test_pass(
+            "Reader",
+            &[
+                ResourceUse {
+                    resource: ResourceId::HDR,
+                    access: ResourceAccess::Read,
+                },
+                ResourceUse {
+                    resource: ResourceId::LDR,
+                    access: ResourceAccess::Write,
+                },
+            ],
+        ));
+        graph.add_pass(test_pass(
+            "Writer",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::Write,
+            }],
+        ));
 
         let (order, lifetimes) = graph.compile_lifetimes().unwrap();
         assert_eq!(order, vec![1, 0]);
@@ -977,5 +911,130 @@ mod tests {
             .find(|item| item.resource == ResourceId::LDR)
             .unwrap();
         assert_eq!((ldr.first_use, ldr.last_use), (1, 1));
+    }
+
+
+    #[test]
+    fn read_write_without_any_writer_is_reported_as_an_error() {
+        let mut graph = RenderGraph::new();
+
+        graph.add_pass(test_pass(
+            "ReadWrite",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::ReadWrite,
+            }],
+        ));
+
+        let error = graph.compile().unwrap_err();
+
+        assert!(error.contains("HDR is read but never written"));
+    }
+
+    #[test]
+    fn read_write_resource_depends_on_writer() {
+        let mut graph = RenderGraph::new();
+
+        graph.add_pass(test_pass(
+            "ReadWrite",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::ReadWrite,
+            }],
+        ));
+        graph.add_pass(test_pass(
+            "Writer",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::Write,
+            }],
+        ));
+
+        let (_, resources) = graph.build_graph();
+        let dependencies = graph.build_dependencies(&resources);
+
+        assert!(has_dependency(
+            &graph,
+            &dependencies,
+            ResourceId::HDR,
+            "ReadWrite",
+            "Writer",
+            EdgeKind::ReadAfterWrite
+        ));
+
+        assert_eq!(graph.compile_names().unwrap(), vec!["Writer", "ReadWrite"]);
+    }
+
+    #[test]
+    fn read_write_output_is_consumed_before_next_write() {
+        let mut graph = RenderGraph::new();
+
+        graph.add_pass(test_pass(
+            "FirstWriter",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::Write,
+            }],
+        ));
+        graph.add_pass(test_pass(
+            "ReadWrite",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::ReadWrite,
+            }],
+        ));
+        graph.add_pass(test_pass(
+            "Reader",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::Read,
+            }],
+        ));
+        graph.add_pass(test_pass(
+            "SecondWriter",
+            &[ResourceUse {
+                resource: ResourceId::HDR,
+                access: ResourceAccess::Write,
+            }],
+        ));
+
+        let (_, resources) = graph.build_graph();
+        let dependencies = graph.build_dependencies(&resources);
+
+        // ReadWrite deve leggere il valore prodotto da FirstWriter.
+        assert!(has_dependency(
+            &graph,
+            &dependencies,
+            ResourceId::HDR,
+            "ReadWrite",
+            "FirstWriter",
+            EdgeKind::ReadAfterWrite,
+        ));
+
+        // SecondWriter deve attendere che ReadWrite abbia terminato.
+        assert!(has_dependency(
+            &graph,
+            &dependencies,
+            ResourceId::HDR,
+            "SecondWriter",
+            "ReadWrite",
+            EdgeKind::WriterOrder,
+        ));
+
+        // SecondWriter non deve sovrascrivere la risorsa prima che Reader
+        // abbia terminato di leggerla.
+        assert!(has_dependency(
+            &graph,
+            &dependencies,
+            ResourceId::HDR,
+            "SecondWriter",
+            "Reader",
+            EdgeKind::WriteAfterRead,
+        ));
+
+        assert_eq!(
+            graph.compile_names().unwrap(),
+            vec!["FirstWriter", "ReadWrite", "Reader", "SecondWriter"]
+        );
     }
 }

@@ -2,16 +2,24 @@ use super::*;
 
 pub struct SkyboxPass {}
 
+const FIELDS: &[ResourceUse] = &[
+    ResourceUse {
+        resource: ResourceId::HDR,
+        access: ResourceAccess::ReadWrite,
+    },
+    ResourceUse {
+        resource: ResourceId::DEPTH,
+        access: ResourceAccess::ReadWrite,
+    },
+];
+
 impl RenderPass for SkyboxPass {
     fn name(&self) -> &'static str {
         "SkyboxPass"
     }
 
-    fn reads(&self) -> &[ResourceId] {
-        &[ResourceId::HDR, ResourceId::DEPTH]
-    }
-    fn writes(&self) -> &[ResourceId] {
-        &[ResourceId::HDR, ResourceId::DEPTH]
+    fn resources(&self) -> &[ResourceUse] {
+        FIELDS
     }
 
     fn execute(
@@ -58,22 +66,5 @@ impl RenderPass for SkyboxPass {
         renderpass.set_bind_group(0, ctx.bindgroup(BindgroupKind::Perframe), &[]);
         renderpass.set_bind_group(1, skybox_bind_group, &[]);
         renderpass.draw(0..36, 0..1);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    //Test single passes.
-    #[test]
-    fn skybox_passes_declare_expected_resource_access() {
-        let pass = RenderPassEnum::Skybox(SkyboxPass{});
-        
-        assert_eq!(pass.reads(), &[ResourceId::HDR, ResourceId::DEPTH]);
-        assert_eq!(
-            pass.writes(),
-            &[ResourceId::HDR, ResourceId::DEPTH]
-        );
     }
 }

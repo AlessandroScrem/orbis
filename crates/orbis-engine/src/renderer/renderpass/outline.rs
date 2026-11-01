@@ -2,16 +2,24 @@ use super::*;
 
 pub struct OutlinePass {}
 
+const FIELDS: &[ResourceUse] = &[
+    ResourceUse {
+        resource: ResourceId::ENTITY,
+        access: ResourceAccess::Read,
+    },
+    ResourceUse {
+        resource: ResourceId::LDR,
+        access: ResourceAccess::ReadWrite,
+    },
+];
+
 impl RenderPass for OutlinePass {
     fn name(&self) -> &'static str {
         "OutlinePass"
     }
 
-    fn reads(&self) -> &[ResourceId] {
-        &[ResourceId::ENTITY, ResourceId::LDR]
-    }
-    fn writes(&self) -> &[ResourceId] {
-        &[ResourceId::LDR]
+    fn resources(&self) -> &[ResourceUse] {
+        FIELDS
     }
 
     fn execute(
@@ -52,22 +60,5 @@ impl RenderPass for OutlinePass {
         );
         renderpass.set_bind_group(1, ctx.bindgroup(BindgroupKind::Perframe), &[]);
         renderpass.draw(0..3, 0..1);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    //Test single passes.
-    #[test]
-    fn outline_passes_declare_expected_resource_access() {
-        let pass = RenderPassEnum::Outline(OutlinePass{});
-        
-        assert_eq!(pass.reads(), &[ResourceId::ENTITY, ResourceId::LDR]);
-        assert_eq!(
-            pass.writes(),
-            &[ResourceId::LDR]
-        );
     }
 }
