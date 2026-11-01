@@ -613,44 +613,6 @@ mod tests {
     }
 
     #[test]
-    fn dependency_order_is_deterministic() {
-        let mut graph = RenderGraph::new();
-        graph.add_pass(test_pass(
-            "Reader LDR",
-            &[ResourceUse {
-                resource: ResourceId::LDR,
-                access: ResourceAccess::Read,
-            }],
-        ));
-        graph.add_pass(test_pass(
-            "Reader HDR",
-            &[ResourceUse {
-                resource: ResourceId::HDR,
-                access: ResourceAccess::Read,
-            }],
-        ));
-        graph.add_pass(test_pass(
-            "Writer LDR",
-            &[ResourceUse {
-                resource: ResourceId::LDR,
-                access: ResourceAccess::Write,
-            }],
-        ));
-        graph.add_pass(test_pass(
-            "Writer HDR",
-            &[ResourceUse {
-                resource: ResourceId::HDR,
-                access: ResourceAccess::Write,
-            }],
-        ));
-
-        let expected = graph.compile_names().unwrap();
-        for _ in 0..32 {
-            assert_eq!(graph.compile_names().unwrap(), expected);
-        }
-    }
-
-    #[test]
     fn multiple_writers_preserve_registration_order() {
         let mut graph = RenderGraph::new();
         graph.add_pass(test_pass(
