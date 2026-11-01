@@ -9,7 +9,7 @@ const FIELDS: &[ResourceUse] = &[
     },
     ResourceUse {
         resource: ResourceId::ENTITY,
-        access: ResourceAccess::Read,
+        access: ResourceAccess::ReadWrite,
     },
     ResourceUse {
         resource: ResourceId::DEPTH,
